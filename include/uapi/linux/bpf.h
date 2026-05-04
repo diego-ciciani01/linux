@@ -42,10 +42,11 @@
 #define BPF_JSGE	0x70	/* SGE is signed '>=', GE in x86 */
 #define BPF_JSLT	0xc0	/* SLT is signed, '<' */
 #define BPF_JSLE	0xd0	/* SLE is signed, '<=' */
+#define BPF_MY_JLT      0x40    /* my reimplementation of BPF_JLT istruction */
 #define BPF_JCOND	0xe0	/* conditional pseudo jumps: may_goto, goto_or_nop */
 #define BPF_CALL	0x80	/* function call */
 #define BPF_EXIT	0x90	/* function return */
-#define MY_BPF_JLT      0xa0    /* my reimplementation of BPF_JLT istruction */
+
 
 /* atomic op type fields (stored in immediate) */
 #define BPF_FETCH	0x01	/* not an opcode on its own, used to build others */

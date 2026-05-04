@@ -15547,6 +15547,7 @@ static int is_scalar_branch_taken(struct bpf_verifier_env *env, struct bpf_reg_s
 			return 1;
 		case BPF_JGT:
 		case BPF_JLT:
+		case BPF_MY_JLT:
 		case BPF_JSGT:
 		case BPF_JSLT:
 		case BPF_JNE:
@@ -15644,6 +15645,11 @@ static int is_scalar_branch_taken(struct bpf_verifier_env *env, struct bpf_reg_s
 		else if (umin1 >= umax2)
 			return 0;
 		break;
+	case BPF_MY_JLT:
+	        if (umax1 < umin2)
+	                return 1;
+	        else if (umin1 >= umax2)
+	                return 0;
 	case BPF_JSLT:
 		if (smax1 < smin2)
 			return 1;
@@ -16282,7 +16288,7 @@ static void sync_linked_regs(struct bpf_verifier_env *env, struct bpf_verifier_s
 	}
 }
 
-static int check_cond_jmp_op(struct bpf_verifier_env *env,
+static int check_cond_jmp_opBPF_JCOND(struct bpf_verifier_env *env,
 			     struct bpf_insn *insn, int *insn_idx)
 {
 	struct bpf_verifier_state *this_branch = env->cur_state;

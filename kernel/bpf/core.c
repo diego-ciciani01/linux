@@ -1705,7 +1705,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(JMP, JNE,  K),			\
 	INSN_3(JMP, JGT,  K),			\
 	INSN_3(JMP, JLT,  K),			\
-	INSN_3(JMP, MY_JLT, k)                  \
+	INSN_3(JMP, MY_JLT, K),	                \
 	INSN_3(JMP, JGE,  K),			\
 	INSN_3(JMP, JLE,  K),			\
 	INSN_3(JMP, JSGT, K),			\
