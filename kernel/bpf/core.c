@@ -1801,6 +1801,13 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_B] = &&LDX_PROBE_MEMSX_B,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_H] = &&LDX_PROBE_MEMSX_H,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_W] = &&LDX_PROBE_MEMSX_W,
+		/* My cusom JMP istruction */
+		[BPF_JMP | BPF_MY_JLT | BPF_K] = &&JMP_MY_JLT_K,
+		[BPF_JMP | BPF_MY_JLT | BPF_X] = &&JMP_MY_JLT_X,
+		[BPF_JMP32 | BPF_MY_JLT | BPF_K] = &&JMP32_MY_JLT_K,
+		[BPF_JMP32 | BPF_MY_JLT | BPF_X] = &&JMP32_MY_JLT_X,
+	
+		
 	};
 #undef BPF_INSN_3_LBL
 #undef BPF_INSN_2_LBL
