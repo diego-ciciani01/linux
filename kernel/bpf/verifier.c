@@ -15699,6 +15699,7 @@ static int flip_opcode(u32 opcode)
 		[BPF_JGT  >> 4] = BPF_JLT,
 		[BPF_JLE  >> 4] = BPF_JGE,
 		[BPF_JLT  >> 4] = BPF_JGT,
+		[BPF_MY_JLT  >> 4] = BPF_JGT,
 		[BPF_JSGE >> 4] = BPF_JSLE,
 		[BPF_JSGT >> 4] = BPF_JSLT,
 		[BPF_JSLE >> 4] = BPF_JSGE,
@@ -15738,6 +15739,8 @@ static int is_pkt_ptr_branch_taken(struct bpf_reg_state *dst_reg,
 	case BPF_JLT:
 		/* pkt < pkt_end */
 		fallthrough;
+	case BPF_MY_JLT:
+	        fallthrough;
 	case BPF_JGE:
 		/* pkt >= pkt_end */
 		if (pkt->range == BEYOND_PKT_END || pkt->range == AT_PKT_END)
@@ -15813,6 +15816,7 @@ static u8 rev_opcode(u8 opcode)
 	case BPF_JGT:		return BPF_JLE;
 	case BPF_JLE:		return BPF_JGT;
 	case BPF_JLT:		return BPF_JGE;
+	case BPF_MY_JLT:        return BPF_JGE;
 	case BPF_JSGE:		return BPF_JSLT;
 	case BPF_JSGT:		return BPF_JSLE;
 	case BPF_JSLE:		return BPF_JSGT;
@@ -15962,6 +15966,15 @@ static void regs_refine_cond_op(struct bpf_reg_state *reg1, struct bpf_reg_state
 		break;
 	case BPF_JLT:
 		if (is_jmp32) {
+			reg1->u32_max_value = min(reg1->u32_max_value, reg2->u32_max_value - 1);
+			reg2->u32_min_value = max(reg1->u32_min_value + 1, reg2->u32_min_value);
+		} else {
+			reg1->umax_value = min(reg1->umax_value, reg2->umax_value - 1);
+			reg2->umin_value = max(reg1->umin_value + 1, reg2->umin_value);
+		}
+		break;
+	case BPF_MY_JLT:
+	  	 if (is_jmp32) {
 			reg1->u32_max_value = min(reg1->u32_max_value, reg2->u32_max_value - 1);
 			reg2->u32_min_value = max(reg1->u32_min_value + 1, reg2->u32_min_value);
 		} else {
@@ -16125,6 +16138,27 @@ static bool try_match_pkt_pointers(const struct bpf_insn *insn,
 			return false;
 		}
 		break;
+	case BPF_MY_JLT:
+	      	if ((dst_reg->type == PTR_TO_PACKET &&
+		     src_reg->type == PTR_TO_PACKET_END) ||
+		    (dst_reg->type == PTR_TO_PACKET_META &&
+		     reg_is_init_pkt_pointer(src_reg, PTR_TO_PACKET))) {
+			/* pkt_data' < pkt_end, pkt_meta' < pkt_data */
+			find_good_pkt_pointers(other_branch, dst_reg,
+					       dst_reg->type, true);
+			mark_pkt_end(this_branch, insn->dst_reg, false);
+		} else if ((dst_reg->type == PTR_TO_PACKET_END &&
+			    src_reg->type == PTR_TO_PACKET) ||
+			   (reg_is_init_pkt_pointer(dst_reg, PTR_TO_PACKET) &&
+			    src_reg->type == PTR_TO_PACKET_META)) {
+			/* pkt_end < pkt_data', pkt_data > pkt_meta' */
+			find_good_pkt_pointers(this_branch, src_reg,
+					       src_reg->type, false);
+			mark_pkt_end(other_branch, insn->src_reg, true);
+		} else {
+			return false;
+		}
+		break;	         
 	case BPF_JGE:
 		if ((dst_reg->type == PTR_TO_PACKET &&
 		     src_reg->type == PTR_TO_PACKET_END) ||
