@@ -318,6 +318,7 @@ static int eval_const_branch(u8 opcode, u64 dst_val, u64 src_val)
 	case BPF_JGT:	return dst_val > src_val;
 	case BPF_JGE:	return dst_val >= src_val;
 	case BPF_JLT:	return dst_val < src_val;
+	case BPF_MY_JLT: return dst_val < src_val; 
 	case BPF_JLE:	return dst_val <= src_val;
 	case BPF_JSGT:	return (s64)dst_val > (s64)src_val;
 	case BPF_JSGE:	return (s64)dst_val >= (s64)src_val;
