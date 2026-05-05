@@ -1362,6 +1362,7 @@ static int bpf_jit_blind_insn(const struct bpf_insn *from,
 	case BPF_JMP | BPF_JNE  | BPF_K:
 	case BPF_JMP | BPF_JGT  | BPF_K:
 	case BPF_JMP | BPF_JLT  | BPF_K:
+	case BPF_JMP | BPF_MY_JLT | BPF_K:  
 	case BPF_JMP | BPF_JGE  | BPF_K:
 	case BPF_JMP | BPF_JLE  | BPF_K:
 	case BPF_JMP | BPF_JSGT | BPF_K:
@@ -1382,6 +1383,7 @@ static int bpf_jit_blind_insn(const struct bpf_insn *from,
 	case BPF_JMP32 | BPF_JNE  | BPF_K:
 	case BPF_JMP32 | BPF_JGT  | BPF_K:
 	case BPF_JMP32 | BPF_JLT  | BPF_K:
+	case BPF_JMP32 | BPF_MY_JLT | BPF_K:
 	case BPF_JMP32 | BPF_JGE  | BPF_K:
 	case BPF_JMP32 | BPF_JLE  | BPF_K:
 	case BPF_JMP32 | BPF_JSGT | BPF_K:
