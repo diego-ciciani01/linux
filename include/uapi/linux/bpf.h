@@ -54,6 +54,9 @@
 #define BPF_LOAD_ACQ	0x100	/* load-acquire */
 #define BPF_STORE_REL	0x110	/* store-release */
 
+/* custom implementation timestemp */
+#define BPF_TIME 0xe0;
+
 enum bpf_cond_pseudo_jmp {
 	BPF_MAY_GOTO = 0,
 };

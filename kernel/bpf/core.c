@@ -1352,6 +1352,7 @@ static int bpf_jit_blind_insn(const struct bpf_insn *from,
 	case BPF_ALU64 | BPF_MUL | BPF_K:
 	case BPF_ALU64 | BPF_MOV | BPF_K:
 	case BPF_ALU64 | BPF_DIV | BPF_K:
+	case BPF_ALU64 | BPF_TIME | BPF_K:
 	case BPF_ALU64 | BPF_MOD | BPF_K:
 		*to++ = BPF_ALU64_IMM(BPF_MOV, BPF_REG_AX, imm_rnd ^ from->imm);
 		*to++ = BPF_ALU64_IMM(BPF_XOR, BPF_REG_AX, imm_rnd);
@@ -1644,6 +1645,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, MOD,  X),			\
 	INSN_2(ALU64, NEG),			\
 	INSN_3(ALU64, END, TO_LE),		\
+	INSN_3(ALU64, TIME, X),                 \  
 	/*   Immediate based. */		\
 	INSN_3(ALU64, ADD,  K),			\
 	INSN_3(ALU64, SUB,  K),			\
@@ -1657,6 +1659,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, ARSH, K),			\
 	INSN_3(ALU64, DIV,  K),			\
 	INSN_3(ALU64, MOD,  K),			\
+	INSN_3(ALU64, TIME, K),                 \
 	/* Call instruction. */			\
 	INSN_2(JMP, CALL),			\
 	/* Exit instruction. */			\
@@ -1799,12 +1802,14 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_B] = &&LDX_PROBE_MEMSX_B,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_H] = &&LDX_PROBE_MEMSX_H,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_W] = &&LDX_PROBE_MEMSX_W,
+		/* Custom timestemp */
+		[BPF_ALU64 | BPF_TIME | BPF_X] = &&ALU64_TIME,
 	};
 #undef BPF_INSN_3_LBL
 #undef BPF_INSN_2_LBL
 	u32 tail_call_cnt = 0;
 
-#define CONT	 ({ insn++; goto select_insn; })
+#define CONT	 ({ insn++; goto select_insnselect_insn; })
 #define CONT_JMP ({ insn++; goto select_insn; })
 
 select_insn:
@@ -1900,6 +1905,14 @@ select_insn:
 	ALU64_MOV_K:
 		DST = IMM;
 		CONT;
+        ALU64_TIME: /* My custom code, timestempo implementation */
+		{
+		  u32 lo, hi;
+		  asm volatile("rdtsc" : "=a"(lo),"=d"(hi));
+		  DST = ((u64)hi << 32) | lo;
+
+		  CONT;
+		}
 	LD_IMM_DW:
 		DST = (u64) (u32) insn[0].imm | ((u64) (u32) insn[1].imm) << 32;
 		insn++;
