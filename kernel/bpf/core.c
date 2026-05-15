@@ -1659,7 +1659,6 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, ARSH, K),			\
 	INSN_3(ALU64, DIV,  K),			\
 	INSN_3(ALU64, MOD,  K),			\
-	INSN_3(ALU64, TIME, K),                 \
 	/* Call instruction. */			\
 	INSN_2(JMP, CALL),			\
 	/* Exit instruction. */			\
