@@ -1809,7 +1809,7 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 #undef BPF_INSN_2_LBL
 	u32 tail_call_cnt = 0;
 
-#define CONT	 ({ insn++; goto select_insnselect_insn; })
+#define CONT	 ({ insn++; goto select_insn; })
 #define CONT_JMP ({ insn++; goto select_insn; })
 
 select_insn:
