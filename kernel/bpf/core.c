@@ -1839,7 +1839,7 @@ select_insn:
 		CONT;					\
 	ALU_##OPCODE##_K:				\
 		DST = (u32) DST OP (u32) IMM;		\
-		CONT;
+		CONT;                                   \
 	/* ALU (rest) */
 #define ALU(OPCODE, OP)					\
 	ALU64_##OPCODE##_X:				\
