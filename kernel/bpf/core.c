@@ -1803,8 +1803,8 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_H] = &&LDX_PROBE_MEMSX_H,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_W] = &&LDX_PROBE_MEMSX_W,
 		/* Custom timestemp */
-		[BPF_ALU64 | BPF_TIME | BPF_X] = &&ALU64_TIME,
-		[BPF_ALU64 | BPF_TIME | BPF_K] = &&ALU64_TIME,
+		[BPF_ALU64 | BPF_TIME | BPF_X] = &&ALU64_TIME_X,
+
 	};
 #undef BPF_INSN_3_LBL
 #undef BPF_INSN_2_LBL
@@ -1906,7 +1906,7 @@ select_insn:
 	ALU64_MOV_K:
 		DST = IMM;
 		CONT;
-        ALU64_TIME: /* My custom code, timestempo implementation */
+        ALU64_TIME_X: /* My custom code, timestempo implementation */
 		{
 		  u32 lo, hi;
 		  asm volatile("rdtsc" : "=a"(lo),"=d"(hi));
