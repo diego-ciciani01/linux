@@ -1645,7 +1645,6 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, MOD,  X),			\
 	INSN_2(ALU64, NEG),			\
 	INSN_3(ALU64, END, TO_LE),		\
-	INSN_3(ALU64, TIME, X),                 \
 	/*   Immediate based. */		\
 	INSN_3(ALU64, ADD,  K),			\
 	INSN_3(ALU64, SUB,  K),			\
@@ -1659,6 +1658,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, ARSH, K),			\
 	INSN_3(ALU64, DIV,  K),			\
 	INSN_3(ALU64, MOD,  K),			\
+	INSN_3(ALU64, TIME, K),		        \
 	/* Call instruction. */			\
 	INSN_2(JMP, CALL),			\
 	/* Exit instruction. */			\
@@ -1802,7 +1802,7 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_H] = &&LDX_PROBE_MEMSX_H,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_W] = &&LDX_PROBE_MEMSX_W,
 		/* Custom timestemp */
-		[BPF_ALU64 | BPF_TIME | BPF_X] = &&ALU64_TIME_X,
+		[BPF_ALU64 | BPF_TIME | BPF_K] = &&ALU64_TIME_K,
 
 	};
 #undef BPF_INSN_3_LBL
@@ -1905,7 +1905,7 @@ select_insn:
 	ALU64_MOV_K:
 		DST = IMM;
 		CONT;
-        ALU64_TIME_X: /* My custom code, timestempo implementation */
+        ALU64_TIME_K: /* My custom code, timestempo implementation */
 		{
 		  u32 lo, hi;
 		  asm volatile("rdtsc" : "=a"(lo),"=d"(hi));
