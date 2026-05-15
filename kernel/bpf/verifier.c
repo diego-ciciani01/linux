@@ -15376,7 +15376,7 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 		return -EINVAL;
 	      }
 
-	      mark_reg_unknown(env, dst_reg);
+	      mark_reg_unknown(env, dst_reg, insn->dst_reg);
 
 	      return 0;
 
