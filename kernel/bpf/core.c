@@ -1645,7 +1645,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, MOD,  X),			\
 	INSN_2(ALU64, NEG),			\
 	INSN_3(ALU64, END, TO_LE),		\
-	INSN_3(ALU64, TIME, X),                 \  
+	INSN_3(ALU64, TIME, X),                 \
 	/*   Immediate based. */		\
 	INSN_3(ALU64, ADD,  K),			\
 	INSN_3(ALU64, SUB,  K),			\
