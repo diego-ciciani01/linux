@@ -15363,6 +15363,22 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 						 (u32)insn->imm);
 			}
 		}
+	} else if (opcode == BPF_TIME){ /* axcept the BPF_TIME opcode*/
+	      struct bpf_reg_state *dst_reg;
+
+	      dst_reg = regs + insn->dst_reg;
+
+	      if (BPF_SRC(insn->code) != 0)
+	         return -EINVAL;
+
+	      if (insn->src_reg != 0 || insn->off != 0 || insn->imm != 0) {
+		verbose(env, "TIME uses reserved fields\n");
+		return -EINVAL;
+	      }
+
+	      mark_reg_unknown(env, dst_reg);
+
+	      return 0;
 
 	} else {	/* all other ALU ops: and, sub, xor, add, ... */
 
