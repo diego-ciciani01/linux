@@ -15368,10 +15368,11 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 
 	      dst_reg = regs + insn->dst_reg;
 
-	      if (BPF_SRC(insn->code) != 0)
-	         return -EINVAL;
-
-	      if (insn->src_reg != 0 || insn->off != 0 || insn->imm != 0) {
+	      if (BPF_SRC(insn->code) != BPF_K){
+		verbose(env, "TIME must use BPF_K\n");
+		return -EINVAL;
+	      }
+	      if (insn->src_reg != 0 || insn->off != 0) {
 		verbose(env, "TIME uses reserved fields\n");
 		return -EINVAL;
 	      }
