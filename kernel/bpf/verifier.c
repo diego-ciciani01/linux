@@ -15372,7 +15372,7 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 		verbose(env, "TIME must use BPF_K\n");
 		return -EINVAL;
 	      }
-	      if (insn->src_reg != 0 || insn->off != 0) {
+	      if (insn->src_reg != 0 || insn->off != 0 || insn->imm != 0) {
 		verbose(env, "TIME uses reserved fields\n");
 		return -EINVAL;
 	      }
@@ -15401,21 +15401,28 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 
+		/* DOPO */
 		if ((opcode == BPF_LSH || opcode == BPF_RSH ||
 		     opcode == BPF_ARSH) && BPF_SRC(insn->code) == BPF_K) {
-			int size = BPF_CLASS(insn->code) == BPF_ALU64 ? 64 : 32;
+		  int size = BPF_CLASS(insn->code) == BPF_ALU64 ? 64 : 32;
+		  if (insn->imm < 0 || insn->imm >= size) {
+		    verbose(env, "invalid shift %d\n", insn->imm);
+		    return -EINVAL;
+		  }
+		}
 
-			if (insn->imm < 0 || insn->imm >= size) {
-				verbose(env, "invalid shift %d\n", insn->imm);
-				return -EINVAL;
-			}
+		/* BPF_TIME viene gestito separatamente — salta check_reg_arg */
+		if (opcode == BPF_TIME) {
+		  mark_reg_unknown(env, regs, insn->dst_reg);
+		  regs[insn->dst_reg].type = SCALAR_VALUE;
+		  return 0;
 		}
 
 		/* check dest operand */
 		err = check_reg_arg(env, insn->dst_reg, DST_OP_NO_MARK);
 		err = err ?: adjust_reg_min_max_vals(env, insn);
 		if (err)
-			return err;
+		  return err;
 	}
 
 	return reg_bounds_sanity_check(env, &regs[insn->dst_reg], "alu");
