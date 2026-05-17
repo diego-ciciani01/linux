@@ -15377,7 +15377,11 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 		return -EINVAL;
 	      }
 
-	      mark_reg_unknown(env, dst_reg, insn->dst_reg);
+	      err = check_reg_arg(env, insn->dst_reg, DST_OP);
+              if (err)
+                return err;
+              mark_reg_unknown(env, regs, insn->dst_reg);
+              regs[insn->dst_reg].type = SCALAR_VALUE;
 
 	      return 0;
 
