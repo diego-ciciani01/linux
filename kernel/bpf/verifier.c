@@ -17578,7 +17578,7 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 
         /* check the sub opcode of the imm field */
         if (insn->imm < 1 || insn->imm > 4 ){
-            varbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
+            verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
             return -EINVAL;
         }
         return 0;
