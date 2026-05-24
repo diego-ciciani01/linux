@@ -1934,7 +1934,7 @@ select_insn:
 			break;
 		}
 		CONT;
-    ALU64_SIMD_K:
+ ALU64_SIMD_K: /* for future architecture adds the behaviour */
         CONT;
     ALU64_SIMD_X:
         CONT;

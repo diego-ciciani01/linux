@@ -17566,25 +17566,42 @@ static int check_indirect_jump(struct bpf_verifier_env *env, struct bpf_insn *in
 
 static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 {
-	int err;
-	struct bpf_insn *insn = &env->prog->insnsi[env->insn_idx];
-	u8 class = BPF_CLASS(insn->code);
-    /* accecpt the BPF_SIMD istruction */
-    if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
-        if (insn->dst_reg > 15 || insn->src_reg > 15 ){
-            verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
-            return -EINVAL;
-        }
-
-        /* check the sub opcode of the imm field */
-        if (insn->imm < 1 || insn->imm > 4 ){
-            verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
-            return -EINVAL;
-        }
-        return 0;
+  int err;
+  struct bpf_insn *insn = &env->prog->insnsi[env->insn_idx];
+  u8 class = BPF_CLASS(insn->code);
+  /* accecpt the BPF_SIMD istruction */
+  if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
+    if (insn->dst_reg > 15 || insn->src_reg > 15 ){
+      verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
+      return -EINVAL;
     }
 
-	switch (class) {
+    /* check the sub opcode of the imm field */
+    if (insn->imm < 1 || insn->imm > 4 ){
+      verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
+      return -EINVAL;
+    }
+
+    if (insn->imm == 1){
+      /* vector load: check if the read of src_reg + off */
+      err = check_mem_access(env, env->insn_idx, insn->src_reg, insn->off, 64, BPF_READ, -1, false, false);
+      if (err) {
+	verbose(env, "AVX-512 Error: Invalid memory read pointer \n");
+	return err;
+      }
+    }else if (insn->imm == 2){
+      err = check_mem_access(env, env->insn_idx, insn->dst_reg, insn->off, 64, BPF_WRITE, -1, false, false);
+      if (err) {
+	verbose(env, "AVX-512 Error: Invalid memory write pointer \n");
+	return err;
+      }
+      
+    }
+      
+    return 0;
+  }
+
+  switch (class) {
 	case BPF_ALU:
 	case BPF_ALU64:
 		return check_alu_op(env, insn);
