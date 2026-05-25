@@ -1756,7 +1756,67 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			b2 = simple_alu_opcodes[BPF_OP(insn->code)];
 			EMIT2(b2, add_2reg(0xC0, dst_reg, src_reg));
 			break;
+		      
+		/* ALU64 and SIMD */
+		case BPF_ALU64 | BPF_SIMD:
+		  u8 dst_reg = insn->dst_reg;
+		  u8 src_reg = insn->src_reg;
+		  s32 imm = insn-imm;
+		  s16 off = insn->off;
 
+		  u8 x86_src_base = bpf2x86[src_reg];
+		  u8 x86_dst_base = bpf2x86[dst_reg];
+		  /* 'imm' take decide witch chose take */
+		  switch (imm){
+		  case 1: { /* VECTOR LOAD: move 64 byte from sequencial memory to the ZMM register*/
+		    EMIT4(0x62, 0xF1, 0x7E, 0x48); /* prepare the opcode for the uploading (0x62) */   
+		    EMIT1(0x6F); /* Send byte ModR/M that combine ZMM destinationregister and base registr x86*/
+	       	    EMIT1(0x00 | (dst_reg << 3) | x86_src_base);
+
+		    if (off != 0) {
+		      EMIT1(off); 
+		    }
+		    break;
+		  }
+		  case 2: {
+		    /* IMM = 2: VECTOR STORE (vmovdqu64 [base_reg + offset], zmm)*/
+		    EMIT4(0x62, 0xF1, 0x7E, 0x48); 
+		    EMIT1(0x7F); /* VMOVDQU64 */
+		    EMIT1(0x00 | (src_reg << 3) | x86_dst_base);
+		    if (off != 0) {
+		      EMIT1(off);
+		    }
+		    break;
+		  }
+
+		  case 3: {
+		    /*
+		     * IMM = 3: VECTOR ADD (vpaddd zmm_dst, zmm_dst, zmm_src)  
+	        */
+		  
+		    EMIT4(0x62, 0xF1, 0x7D, 0x48); 
+		    EMIT1(0xFE); // Opcode di VPADDD
+		   
+		    EMIT1(0xC0 | (dst_reg << 3) | src_reg); 
+		    break;
+		  }
+
+		  case 4: {
+
+		    /* IMM = 4: VECTOR XOR (vpxord zmm_dst, zmm_dst, zmm_src)*/
+      		    EMIT4(0x62, 0xF1, 0x7D, 0x48);
+		    EMIT1(0xEF); // Opcode of VPXORD
+		    EMIT1(0xC0 | (dst_reg << 3) | src_reg);
+		    break;
+		  }
+
+		  default:
+		    pr_err("BPF JIT Error: Unknown SIMD sub-opcode %d\n", imm);
+		    return -EINVAL;
+		  }
+    
+		  break;
+		  }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
 			if (insn_is_cast_user(insn)) {
 				if (dst_reg != src_reg)
