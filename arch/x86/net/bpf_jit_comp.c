@@ -1758,7 +1758,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			break;
 		      
 		/* ALU64 and SIMD */
-		case BPF_ALU64 | BPF_SIMD:
+		case BPF_ALU64 | BPF_SIMD:{
 		  u8 dst_reg = insn->dst_reg;
 		  u8 src_reg = insn->src_reg;
 		  s32 imm = insn-imm;
@@ -1773,22 +1773,21 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		    EMIT1(0x6F); /* Send byte ModR/M that combine ZMM destinationregister and base registr x86*/
 	       	    EMIT1(0x00 | (dst_reg << 3) | x86_src_base);
 
-		    if (off != 0) {
-		      EMIT1(off); 
-		    }
-		    break;
+		    if (off != 0) 
+		      EMIT1(off);
+		    
+		    break;	 
 		  }
 		  case 2: {
 		    /* IMM = 2: VECTOR STORE (vmovdqu64 [base_reg + offset], zmm)*/
 		    EMIT4(0x62, 0xF1, 0x7E, 0x48); 
 		    EMIT1(0x7F); /* VMOVDQU64 */
 		    EMIT1(0x00 | (src_reg << 3) | x86_dst_base);
-		    if (off != 0) {
+		    if (off != 0)
 		      EMIT1(off);
-		    }
+		   
 		    break;
 		  }
-
 		  case 3: {
 		    /*
 		     * IMM = 3: VECTOR ADD (vpaddd zmm_dst, zmm_dst, zmm_src)  
@@ -1816,7 +1815,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		  }
     
 		  break;
-		  }
+		 }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
 			if (insn_is_cast_user(insn)) {
 				if (dst_reg != src_reg)
