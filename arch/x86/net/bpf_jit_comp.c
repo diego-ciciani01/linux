@@ -62,6 +62,27 @@ static u8 *emit_code(u8 *ptr, u32 bytes, unsigned int len)
 #define EMIT_ENDBR_POISON()	do { } while (0)
 #endif
 
+/* macro map to map bpf register with x86 */
+#define bpf2x86(bpf_reg) ({						\
+      const char *x86_reg;						\
+      switch (bpf_reg){							\
+      case BPF_REG_0: x86_reg = "%rax"; break;				\
+      case BPF_REG_1: x86_reg = "%rdi"; break; /*argument 1 */		\
+      case BPF_REG_2: x86_reg = "%rsi"; break; /*argument 2 */		\
+      case BPF_REG_3: x86_reg = "%rdx"; break; /*argument 3 */		\
+      case BPF_REG_4: x86_reg = "%rcx"; break; /*argument 4 */		\
+      case BPF_REG_5: x86_reg = "%r8";  break; /*argument 5 */ 		\
+      case BPF_REG_6: x86_reg = "%rbx"; break; /* Callee-saved */	\
+      case BPF_REG_7: x86_reg = "%r13"; break; /* Callee-saved */	\
+      case BPF_REG_8: x86_reg = "%r14"; break; /* Callee-saved */	\
+      case BPF_REG_9: x86_reg = "%r15"; break; /* Callee-saved */	\
+      case BPF_REG_10: x86_reg = "%rbp"; break; /* Frame Pointer (Read-Only) */ \
+      case BPF_REG_AX: x86_reg = "%r11"; break;				\
+      default: x86_reg = "UNKNOWN"; break;				\
+      }									\
+      x86_reg;								\
+    })
+
 static bool is_imm8(int value)
 {
 	return value <= 127 && value >= -128;
@@ -1761,7 +1782,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		case BPF_ALU64 | BPF_SIMD:{
 		  u8 dst_reg = insn->dst_reg;
 		  u8 src_reg = insn->src_reg;
-		  s32 imm = insn-imm;
+		  s32 imm = insn->imm;
 		  s16 off = insn->off;
 
 		  u8 x86_src_base = bpf2x86[src_reg];
