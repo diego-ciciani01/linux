@@ -64,18 +64,18 @@ static u8 *emit_code(u8 *ptr, u32 bytes, unsigned int len)
 
 /* static array to to map bpf register with x86 */
 static const u8 bpf2x86[] = {
-	[BPF_REG_0] = X86_REG_RAX,
-	[BPF_REG_1] = X86_REG_RDI,
-	[BPF_REG_2] = X86_REG_RSI,
-	[BPF_REG_3] = X86_REG_RDX,
-	[BPF_REG_4] = X86_REG_RCX,
-	[BPF_REG_5] = X86_REG_R8,
-	[BPF_REG_6] = X86_REG_RBX,
-	[BPF_REG_7] = X86_REG_R13,
-	[BPF_REG_8] = X86_REG_R14,
-	[BPF_REG_9] = X86_REG_R15,
-	[BPF_REG_10] = X86_REG_RBP,
-	[BPF_REG_AX] = X86_REG_R11,
+	[BPF_REG_0] = 0,    /* returned value */
+	[BPF_REG_1] = 7,              /* %rdi */
+	[BPF_REG_2] = 6,              /* %rsi */
+	[BPF_REG_3] = 2,              /* %rdx */
+	[BPF_REG_4] = 1,              /* %rcx */
+	[BPF_REG_5] = 8,              /* %r8  */
+	[BPF_REG_6] = 3,              /* %rbx */
+	[BPF_REG_7] = 13,             /* %r13 */
+	[BPF_REG_8] = 14,             /* %r14 */
+	[BPF_REG_9] = 15,             /* %r15 */
+	[BPF_REG_10] = 5,             /* %rbp (Frame Pointer) */
+	[BPF_REG_AX] = 11,            /* %r11 */
 };
 
 static bool is_imm8(int value)
@@ -1772,7 +1772,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			b2 = simple_alu_opcodes[BPF_OP(insn->code)];
 			EMIT2(b2, add_2reg(0xC0, dst_reg, src_reg));
 			break;
-		      
+
 		/* ALU64 and SIMD */
 		case BPF_ALU64 | BPF_SIMD:{
 		  u8 dst_reg = insn->dst_reg;
@@ -1785,34 +1785,34 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		  /* 'imm' take decide witch chose take */
 		  switch (imm){
 		  case 1: { /* VECTOR LOAD: move 64 byte from sequencial memory to the ZMM register*/
-		    EMIT4(0x62, 0xF1, 0x7E, 0x48); /* prepare the opcode for the uploading (0x62) */   
+		    EMIT4(0x62, 0xF1, 0x7E, 0x48); /* prepare the opcode for the uploading (0x62) */
 		    EMIT1(0x6F); /* Send byte ModR/M that combine ZMM destinationregister and base registr x86*/
 	       	    EMIT1(0x00 | (dst_reg << 3) | x86_src_base);
 
-		    if (off != 0) 
+		    if (off != 0)
 		      EMIT1(off);
-		    
-		    break;	 
+
+		    break;
 		  }
 		  case 2: {
 		    /* IMM = 2: VECTOR STORE (vmovdqu64 [base_reg + offset], zmm)*/
-		    EMIT4(0x62, 0xF1, 0x7E, 0x48); 
+		    EMIT4(0x62, 0xF1, 0x7E, 0x48);
 		    EMIT1(0x7F); /* VMOVDQU64 */
 		    EMIT1(0x00 | (src_reg << 3) | x86_dst_base);
 		    if (off != 0)
 		      EMIT1(off);
-		   
+
 		    break;
 		  }
 		  case 3: {
 		    /*
-		     * IMM = 3: VECTOR ADD (vpaddd zmm_dst, zmm_dst, zmm_src)  
+		     * IMM = 3: VECTOR ADD (vpaddd zmm_dst, zmm_dst, zmm_src)
 	        */
-		  
-		    EMIT4(0x62, 0xF1, 0x7D, 0x48); 
+
+		    EMIT4(0x62, 0xF1, 0x7D, 0x48);
 		    EMIT1(0xFE); // Opcode di VPADDD
-		   
-		    EMIT1(0xC0 | (dst_reg << 3) | src_reg); 
+
+		    EMIT1(0xC0 | (dst_reg << 3) | src_reg);
 		    break;
 		  }
 
@@ -1829,7 +1829,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		    pr_err("BPF JIT Error: Unknown SIMD sub-opcode %d\n", imm);
 		    return -EINVAL;
 		  }
-    
+
 		  break;
 		 }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
