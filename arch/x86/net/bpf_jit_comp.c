@@ -62,26 +62,21 @@ static u8 *emit_code(u8 *ptr, u32 bytes, unsigned int len)
 #define EMIT_ENDBR_POISON()	do { } while (0)
 #endif
 
-/* macro map to map bpf register with x86 */
-#define bpf2x86(bpf_reg) ({						\
-      const char *x86_reg;						\
-      switch (bpf_reg){							\
-      case BPF_REG_0: x86_reg = "%rax"; break;				\
-      case BPF_REG_1: x86_reg = "%rdi"; break; /*argument 1 */		\
-      case BPF_REG_2: x86_reg = "%rsi"; break; /*argument 2 */		\
-      case BPF_REG_3: x86_reg = "%rdx"; break; /*argument 3 */		\
-      case BPF_REG_4: x86_reg = "%rcx"; break; /*argument 4 */		\
-      case BPF_REG_5: x86_reg = "%r8";  break; /*argument 5 */ 		\
-      case BPF_REG_6: x86_reg = "%rbx"; break; /* Callee-saved */	\
-      case BPF_REG_7: x86_reg = "%r13"; break; /* Callee-saved */	\
-      case BPF_REG_8: x86_reg = "%r14"; break; /* Callee-saved */	\
-      case BPF_REG_9: x86_reg = "%r15"; break; /* Callee-saved */	\
-      case BPF_REG_10: x86_reg = "%rbp"; break; /* Frame Pointer (Read-Only) */ \
-      case BPF_REG_AX: x86_reg = "%r11"; break;				\
-      default: x86_reg = "UNKNOWN"; break;				\
-      }									\
-      x86_reg;								\
-    })
+/* static array to to map bpf register with x86 */
+static const u8 bpf2x86[] = {
+	[BPF_REG_0] = X86_REG_RAX,
+	[BPF_REG_1] = X86_REG_RDI,
+	[BPF_REG_2] = X86_REG_RSI,
+	[BPF_REG_3] = X86_REG_RDX,
+	[BPF_REG_4] = X86_REG_RCX,
+	[BPF_REG_5] = X86_REG_R8,
+	[BPF_REG_6] = X86_REG_RBX,
+	[BPF_REG_7] = X86_REG_R13,
+	[BPF_REG_8] = X86_REG_R14,
+	[BPF_REG_9] = X86_REG_R15,
+	[BPF_REG_10] = X86_REG_RBP,
+	[BPF_REG_AX] = X86_REG_R11,
+};
 
 static bool is_imm8(int value)
 {
