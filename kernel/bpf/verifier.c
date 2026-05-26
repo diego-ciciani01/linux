@@ -17579,19 +17579,19 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
     }
 
     /* check the sub opcode of the imm field */
-    if (insn->imm < 1 || insn->imm > 4 ){
+    if (insn->imm < 1 || insn->imm > 6 ){
       verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
       return -EINVAL;
     }
 
-    if (insn->imm == 1){
+    if (insn->imm == 5){
       /* vector load: check if the read of src_reg + off */
       err = check_mem_access(env, env->insn_idx, insn->src_reg, insn->off, 64, BPF_READ, -1, false, false);
       if (err) {
 	verbose(env, "AVX-512 Error: Invalid memory read pointer \n");
 	return err;
       }
-    }else if (insn->imm == 2){
+    }else if (insn->imm == 6){
       err = check_mem_access(env, env->insn_idx, insn->dst_reg, insn->off, 64, BPF_WRITE, -1, false, false);
       if (err) {
 	verbose(env, "AVX-512 Error: Invalid memory write pointer \n");
