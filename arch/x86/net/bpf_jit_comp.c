@@ -1675,15 +1675,34 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
   u8 modrm;
   u8 x86_op;
   u8 evex_p1_base;
+  u8 vvvv;
+  u8 mod_bits;
 
   switch(sub_op){
   case(1): /* vpadd */
     x86_op = 0xFE;
     evex_p1_base = 0x71;
+    mod_bits = 0xC0; /* operation between registers */
+    vvvv = (~dst) & 0x0F; /* the dst is part of operations (always between registers) */
     break;
   case(4): /* vpxord */
     x86_op = 0xEF;
     evex_p1_base = 0x7D;
+    vvvv = (~dst) & 0x0F;
+    mod_bits = 0xC0;
+    break;
+    /* VMOVDQU32 */
+  case(5): /* Memory -> ZMM */
+    x86_op = 0x6F;
+    evex_p1_base = 0x7D;
+    vvvv = 0x0F; /* forced to 1111 bit, not use for MOV */
+    mod_bits = 0x00;
+    break;
+  case(6): /* ZMM -> Memory */
+    x86_op = 0x7F;
+    evex_p1_base = 0x7D;
+    vvvv = 0x0F; /* forced to 1111 bit, not use for MOV */
+    mod_bits = 0x00;
     break;
   default:
     return prog;
@@ -1691,12 +1710,11 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
 
   evex_p0 = 0xF1;
 
-  u8 vvvv = (~dst) & 0x0F;
   evex_p1 = evex_p1_base | (vvvv << 3);
 
   evex_p2 = 0x48;
 
-  modrm = 0xc0 | ((dst & 7) << 3) | (src & 7);
+  modrm = mod_bits | ((dst & 7) << 3) | (bpf2x86[src] & 7);
 
   /* phisical emission of byte */
   EMIT4(0x62, evex_p0, evex_p1, evex_p2);
