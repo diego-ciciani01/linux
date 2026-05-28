@@ -90,10 +90,12 @@ EOF
 # Rende lo script eseguibile
 chmod +x my_rootfs/init
 
+echo "Compilazione del test program..."
+gcc test/${TEST_FILE}.c -o test/${TEST_FILE}
+
 cp test/${TEST_FILE} my_rootfs/bin/${TEST_FILE}
 cp -r linux/tools/bpf/bpftool/bpftool my_rootfs/bin/
 chmod +x my_rootfs/bin/${TEST_FILE}
-
 
 # (Rimosso il blocco per test_istruction)
 
