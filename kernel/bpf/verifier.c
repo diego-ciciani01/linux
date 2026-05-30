@@ -17572,8 +17572,9 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
   pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
   /* accecpt the BPF_SIMD istruction */
   if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
-        pr_info("DAISY DEBUG: [OK] Rilevata istruzione SIMD custom!\n");
-      if (insn->dst_reg > 15 || insn->src_reg > 15 ){
+      pr_info("DAISY DEBUG: >>> STO ESEGUENDO LA VERSIONE NUOVA (LIMITE 6) <<<\n");
+      pr_info("DAISY DEBUG: [OK] Rilevata istruzione SIMD custom!\n");
+        if (insn->dst_reg > 15 || insn->src_reg > 15 ){
     verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
       return -EINVAL;
     }
@@ -18328,7 +18329,7 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 
-		if (insn->imm < 1 || insn->imm > 4) {
+		if (insn->imm < 1 || insn->imm > 6) {
 			verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
 			return -EINVAL;
 		}
