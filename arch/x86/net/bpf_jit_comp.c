@@ -1681,8 +1681,8 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
   u8 reg_val = 0;
   u8 rm_val = 0;
   u8 v_reg = 0x0F;
-  
-  
+
+
   switch(sub_op){
   case(1): /* vpadd */
     x86_op = 0xFE;
@@ -1718,8 +1718,8 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
     pp = 2;        /* prefix F3 */
     mod_bits = 0x00;
     reg_val = src;          /* ZMM source to save */
-    rm_val = bpf2x86[dst];  
-    v_reg = 0x0F;           
+    rm_val = bpf2x86[dst];
+    v_reg = 0x0F;
     break;
   default:
     return prog;
@@ -1730,11 +1730,20 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
   if (rm_val & 8)  evex_p0 &= ~(1 << 5);
 
   /* build the EVEX P1: [ W v v v v 1 p p ]  */
-  u8 vvvv_bits = (~v_reg) & 0x0F;
-  evex_p1 = (vvvv_bits << 3) | 0x04 | (pp & 3);
-
+u8 vvvv_field;
+if (v_reg == 0x0F) {
+    // Non usato → tutti 1 nei bit [6:3]
+    vvvv_field = 0x0F;
+} else {
+    // Usato → complemento a 1 del numero di registro (4 bit)
+    vvvv_field = (~v_reg) & 0x0F;
+}
+evex_p1 = (0 << 7)            /* W = 0 per operandi a 32 bit */
+        | (vvvv_field << 3)    /* vvvv nei bit [6:3]          */
+        | (1 << 2)             /* bit fisso = 1               */
+        | (pp & 3);            /* prefix pp nei bit [1:0]     */
   /* build the EVEX P2: [ z L' L b V' 0 a a ] */
-  evex_p2 = 0x48; 
+  evex_p2 = 0x48;
 
   modrm = mod_bits | ((reg_val & 7) << 3) | (rm_val & 7);
 
@@ -1742,7 +1751,20 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
   EMIT4(0x62, evex_p0, evex_p1, evex_p2);
   EMIT1(x86_op);
   EMIT1(modrm);
+  /* Subito dopo EMIT1(modrm) e i byte opzionali */
+pr_info("DAISY JIT emit_simd_alu sub_op=%d: "
+        "%02x %02x %02x %02x %02x %02x\n",
+        sub_op,
+        *(prog-6), *(prog-5), *(prog-4),
+        *(prog-3), *(prog-2), *(prog-1));
 
+
+  if (sub_op == 5 || sub_op == 6) {
+        if ((rm_val & 7) == 4) {
+            EMIT1(0x24);
+        }
+        EMIT1(0x00);
+  }
   return prog;
 }
 

@@ -17572,11 +17572,11 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
   pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
   /* accecpt the BPF_SIMD istruction */
   if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
-      pr_info("DAISY DEBUG: >>> STO ESEGUENDO LA VERSIONE NUOVA (LIMITE 6) <<<\n");
-      pr_info("DAISY DEBUG: [OK] Rilevata istruzione SIMD custom!\n");
-        if (insn->dst_reg > 15 || insn->src_reg > 15 ){
-    verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
-      return -EINVAL;
+    pr_info("DAISY DEBUG: >>> STO ESEGUENDO LA VERSIONE NUOVA (LIMITE 6) <<<\n");
+    pr_info("DAISY DEBUG: [OK] Rilevata istruzione SIMD custom!\n");
+    if (insn->dst_reg > 15 || insn->src_reg > 15 ){
+        verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
+        return -EINVAL;
     }
 
     /* check the sub opcode of the imm field */
@@ -17585,22 +17585,24 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
       return -EINVAL;
     }
 
-    if (insn->imm == 5){
-      /* vector load: check if the read of src_reg + off */
-      err = check_mem_access(env, env->insn_idx, insn->src_reg, insn->off, 64, BPF_READ, -1, false, false);
-      if (err) {
-	verbose(env, "AVX-512 Error: Invalid memory read pointer \n");
-	return err;
-      }
-    }else if (insn->imm == 6){
-      err = check_mem_access(env, env->insn_idx, insn->dst_reg, insn->off, 64, BPF_WRITE, -1, false, false);
-      if (err) {
-	verbose(env, "AVX-512 Error: Invalid memory write pointer \n");
-	return err;
-      }
+    if (insn->imm == 5 || insn->imm==5){
+        struct bpf_func_state *cur_frame = env->cur_state->frame[env->cur_state->curframe];
+        u8 ptr_reg = (insn->imm == 5) ? insn->src_reg : insn->dst_reg;
+
+        struct bpf_reg_state *reg = &cur_frame->regs[ptr_reg];
+
+        if (reg->type != PTR_TO_PACKET){
+            verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET)\n");
+            return -EACCES;
+        }
+
+        /* check the range */
+        if (reg->umax_value + insn->off + 64 > reg->range) {
+            verbose(env, "AVX-512 Error: Out of range access for packet (OOB)\n");
+            return -EACCES;
+        }
 
     }
-
     return 0;
   }
 
