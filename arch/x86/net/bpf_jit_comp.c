@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+<// SPDX-License-Identifier: GPL-2.0-only
 /*
  * BPF JIT compiler
  *
@@ -19,6 +19,7 @@
 #include <asm/text-patching.h>
 #include <asm/unwind.h>
 #include <asm/cfi.h>
+#include <asm/fpu/api.h>
 
 static bool all_callee_regs_used[4] = {true, true, true, true};
 
@@ -1665,34 +1666,37 @@ static int emit_spectre_bhb_barrier(u8 **pprog, u8 *ip,
 	return 0;
 }
 
+static u8 *emit_fpu_begin(u8 *prog)
+{
+  prog = emit_
+}
+
+
+
 /* emit simd istruction for EVEX,
    this bytecode is used to extend the byte of x86 to the vector operations (AVX-512)
  */
-
 static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
 {
   u8 evex_p0, evex_p1, evex_p2;
-  u8 modrm;
   u8 x86_op;
-
-  u8 mm = 1;
-  u8 pp = 0;
-  u8 mod_bits= 0;
-  u8 reg_val = 0;
-  u8 rm_val = 0;
-  u8 v_reg = 0x0F;
-
+  u8 mm, pp;
+  u8 reg_val; /* field '/r' "reg" in ModRM */
+  u8 rm_val; /*  field '/r' side "rm" in ModRM  */
+  u8 v_reg;  /* vvvv register */
+  bool is_mem = false;
 
   switch(sub_op){
-  case(1): /* vpadd */
+  /* ---------------------- VPADD ------------------------- */
+  case(1): 
     x86_op = 0xFE;
-    mm = 2;
-    pp = 1;
-    mod_bits = 0xc0;
-    reg_val = dst;
-    rm_val = src;
-    v_reg = dst;
+    mm = 1; /* map 0F */
+    pp = 1; /* prefix 66 */
+    reg_val = dst; /* ZMM destination */
+    rm_val = src; /* second source */
+    v_reg = dst; 
     break;
+    /* ---------------------- VPXORD --------------------------- */
   case(4): /* vpxord */
     x86_op = 0xEF;
     mm = 2;        /* map 0F38 */
@@ -1702,69 +1706,60 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
     rm_val = src;
     v_reg = dst;
     break;
-    /* VMOVDQU32 */
+    /* --------------------------- VMOVDQU32 [gpr_src + off] --------------------------  */
+    
   case(5): /* Memory -> ZMM */
     x86_op = 0x6F;
     mm = 1;        /* map 0F */
     pp = 2;        /* prefix F3 */
-    mod_bits = 0x00;
     reg_val = dst;          /* ZMM destination */
-    rm_val = bpf2x86[src];  /* register eBPF (mapped in x86) */
+    rm_val = bpf2x86[src];  /* register eBPF (mapped in x86) - GPR*/
     v_reg = 0x0F;           /* not used on mov */
+    is_mem = true;
     break;
+    
   case(6): /* ZMM -> Memory */
     x86_op = 0x7F;
     mm = 1;        /* map 0F */
     pp = 2;        /* prefix F3 */
-    mod_bits = 0x00;
     reg_val = src;          /* ZMM source to save */
-    rm_val = bpf2x86[dst];
+    rm_val = bpf2x86[dst]; /* register eBPF (mapped in x86) - GPR*/
     v_reg = 0x0F;
+    is_mem = true;
     break;
   default:
     return prog;
   }
 
-  evex_p0 = 0xF0 | (mm & 3);
-  if (reg_val & 8) evex_p0 &= ~(1 << 7);
-  if (rm_val & 8)  evex_p0 &= ~(1 << 5);
+  /* build EVEX */
 
+  /* ------------------ EVEX P0 ----------------- */
+  evex_p0 = ((~reg_val & 0x8u) << 4) |0x40u | ((~rm_val & 0x8u) << 2) | 0x10u | (mm & 0x3u); /* some '&' are used to do not pollute the byte*/
+
+  /* ----------------- EVEX P1 --------------- */
+  
   /* build the EVEX P1: [ W v v v v 1 p p ]  */
-u8 vvvv_field;
-if (v_reg == 0x0F) {
-    // Non usato → tutti 1 nei bit [6:3]
-    vvvv_field = 0x0F;
-} else {
-    // Usato → complemento a 1 del numero di registro (4 bit)
-    vvvv_field = (~v_reg) & 0x0F;
-}
-evex_p1 = (0 << 7)            /* W = 0 per operandi a 32 bit */
-        | (vvvv_field << 3)    /* vvvv nei bit [6:3]          */
-        | (1 << 2)             /* bit fisso = 1               */
-        | (pp & 3);            /* prefix pp nei bit [1:0]     */
-  /* build the EVEX P2: [ z L' L b V' 0 a a ] */
+  u8 vvvv = (v_reg == 0x0F) ? 0x0Fu : (~v_reg & 0x0Fu);
+  evex_p1 = (vvvv << 3) | 0x04u | (pp & 0x3u);
+
+  /* ------------ EVEX P2 fixed value ----------- */
   evex_p2 = 0x48;
 
-  modrm = mod_bits | ((reg_val & 7) << 3) | (rm_val & 7);
+  /* --------------- Emission byte ---------------- */
+  u8 *emit_start = prog;
+  *prog++ = 0x
 
   /* phisical emission of byte */
   EMIT4(0x62, evex_p0, evex_p1, evex_p2);
   EMIT1(x86_op);
-  EMIT1(modrm);
-  /* Subito dopo EMIT1(modrm) e i byte opzionali */
-pr_info("DAISY JIT emit_simd_alu sub_op=%d: "
-        "%02x %02x %02x %02x %02x %02x\n",
-        sub_op,
-        *(prog-6), *(prog-5), *(prog-4),
-        *(prog-3), *(prog-2), *(prog-1));
+
+  pr_info("DAISY JIT emit_simd_alu sub_op=%d: "
+	  "%02x %02x %02x %02x %02x %02x\n",
+	  sub_op,
+	  *(prog-6), *(prog-5), *(prog-4),
+	  *(prog-3), *(prog-2), *(prog-1));
 
 
-  if (sub_op == 5 || sub_op == 6) {
-        if ((rm_val & 7) == 4) {
-            EMIT1(0x24);
-        }
-        EMIT1(0x00);
-  }
   return prog;
 }
 
@@ -1881,9 +1876,9 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		  u8 dst_reg = insn->dst_reg;
 		  u8 src_reg = insn->src_reg;
 		  s32 sub_op = insn->imm;
-
-          /* invoke the dynamic emitter */
-          emit_simd_alu(insn->code, dst_reg, src_reg, sub_op, prog);
+		  s16 off = insn->off;
+		  /* invoke the dynamic emitter */
+		  emit_simd_alu(insn->code, dst_reg, src_reg, sub_op, off,  prog);
 		  break;
 		 }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
