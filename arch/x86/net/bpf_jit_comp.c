@@ -1666,17 +1666,11 @@ static int emit_spectre_bhb_barrier(u8 **pprog, u8 *ip,
 	return 0;
 }
 
-static u8 *emit_fpu_begin(u8 *prog)
-{
-  prog = emit_
-}
-
-
 
 /* emit simd istruction for EVEX,
    this bytecode is used to extend the byte of x86 to the vector operations (AVX-512)
  */
-static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
+static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
 {
   u8 evex_p0, evex_p1, evex_p2;
   u8 x86_op;
@@ -1701,7 +1695,6 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
     x86_op = 0xEF;
     mm = 2;        /* map 0F38 */
     pp = 1;        /* prefix 66 */
-    mod_bits = 0xC0;
     reg_val = dst;
     rm_val = src;
     v_reg = dst;
@@ -1746,7 +1739,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 *prog)
   evex_p2 = 0x48;
 
   /* --------------- Emission byte ---------------- */
-  u8 *emit_start = prog;
+  //u8 *emit_start = prog;
   *prog++ = 0x
 
   /* phisical emission of byte */
