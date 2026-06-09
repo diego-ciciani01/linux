@@ -1665,7 +1665,82 @@ static int emit_spectre_bhb_barrier(u8 **pprog, u8 *ip,
 	*pprog = prog;
 	return 0;
 }
+/* emit fpu for simd*/
 
+static u8 *emit_save_bpf_caller_regs(u8 *prog)
+{
+    /* Allign frame to 16 */
+    *prog++ = 0x55;                         /* PUSH RBP */
+    *prog++ = 0x48; *prog++ = 0x89;
+    *prog++ = 0xE5;                         /* MOV RBP, RSP */
+    *prog++ = 0x48; *prog++ = 0x83;
+    *prog++ = 0xE4; *prog++ = 0xF0;         /* AND RSP, -16 */
+ 
+    /* Push */
+    *prog++ = 0x41; *prog++ = 0x50;         /* PUSH R8  (BPF R5) */
+    *prog++ = 0x51;                         /* PUSH RCX (BPF R4) */
+    *prog++ = 0x52;                         /* PUSH RDX (BPF R3) */
+    *prog++ = 0x56;                         /* PUSH RSI (BPF R2) */
+    *prog++ = 0x57;                         /* PUSH RDI (BPF R1) */
+    *prog++ = 0x50;                         /* PUSH RAX (BPF R0) ← RSP 16-aligned ✓ */
+ 
+    return prog;
+}
+
+/* emit_kernel_call_abs emit a abosulute call at one function, bacause of the JIT code can be allocated a 2 GB far from the kernel functins */
+static u8 *emit_kernel_call_abs(u8 *prog, void *func)
+{
+    u64 addr = (u64)func;
+ 
+    /* MOVABS RAX, imm64 (10 byte: REX.W + opcode B8 + 8 byte addr) */
+    *prog++ = 0x48;
+    *prog++ = 0xB8;
+    memcpy(prog, &addr, 8);
+    prog += 8;
+ 
+    /* CALL RAX (2 byte) */
+    *prog++ = 0xFF;
+    *prog++ = 0xD0;
+ 
+    return prog;
+}
+ 
+
+static u8 *emit_restore_bpf_caller_regs(u8 *prog)
+{
+    *prog++ = 0x58;                         /* POP RAX */
+    *prog++ = 0x5F;                         /* POP RDI */
+    *prog++ = 0x5E;                         /* POP RSI */
+    *prog++ = 0x5A;                         /* POP RDX */
+    *prog++ = 0x59;                         /* POP RCX */
+    *prog++ = 0x41; *prog++ = 0x58;         /* POP R8  */
+ 
+    *prog++ = 0x48; *prog++ = 0x89;
+    *prog++ = 0xEC;                         /* MOV RSP, RBP */
+    *prog++ = 0x5D;                         /* POP RBP */
+ 
+    return prog;
+}
+ 
+
+static u8 * emit_fpu_begin(u8 *prog)
+{
+  prog = emit_save_bpf_caller_regs(prog);
+  prog = emit_kernel_call_abs(prog, kernel_fpu_begin);
+  prog = emit_restore_bpf_caller_regs(prog);
+
+  return prog;
+  
+}
+
+static u8 *emit_fpu_end(u8 *prog)
+{
+    prog = emit_save_bpf_caller_regs(prog);
+    prog = emit_kernel_call_abs(prog, kernel_fpu_end);
+    prog = emit_restore_bpf_caller_regs(prog);
+    return prog;
+}
+ 
 
 /* emit simd istruction for EVEX,
    this bytecode is used to extend the byte of x86 to the vector operations (AVX-512)
@@ -1884,6 +1959,9 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 
 		ip = image + addrs[i - 1] + (prog - temp);
 
+		/*Emit fpu */ 
+		prog = emit_fpu_begin(prog);
+		
 		switch (insn->code) {
 			/* ALU */
 		case BPF_ALU | BPF_ADD | BPF_X:
@@ -1908,8 +1986,10 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		  u8 src_reg = insn->src_reg;
 		  s32 sub_op = insn->imm;
 		  s16 off = insn->off;
+		 
 		  /* invoke the dynamic emitter */
 		  emit_simd_alu(insn->code, dst_reg, src_reg, sub_op, off,  prog);
+		  prog = emit_fpu_end(prog);
 		  break;
 		 }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
