@@ -1740,18 +1740,56 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
 
   /* --------------- Emission byte ---------------- */
   //u8 *emit_start = prog;
-  *prog++ = 0x
+  *prog++ = 0x62;
+  *prog++ = evex_p0;
+  *prog++ = evex_p1;
+  *prog++ = evex_p2;
+  *prog++ = x86_op;
+  
 
-  /* phisical emission of byte */
-  EMIT4(0x62, evex_p0, evex_p1, evex_p2);
-  EMIT1(x86_op);
-
-  pr_info("DAISY JIT emit_simd_alu sub_op=%d: "
-	  "%02x %02x %02x %02x %02x %02x\n",
-	  sub_op,
-	  *(prog-6), *(prog-5), *(prog-4),
-	  *(prog-3), *(prog-2), *(prog-1));
-
+  if (!is_mem){
+    *prog++ = 0xc0u | ((reg_val & 7u) << 3) | (rm_val & 7u);
+    /* Istruction register to register mod = 11 */
+  }else {
+    u8 base3 = rm_val & 7u;
+    u8 mod;
+ 
+    if (mem_off == 0 && base3 != 5) {
+      mod = 0x00;   /* [reg] */
+    } else if (mem_off >= -128 && mem_off <= 127) {
+      mod = 0x40;   /* [reg+disp8] — 1 byte displacement */
+    } else {
+      mod = 0x80;   /* [reg+disp32]— 4 byte displacement */
+    }
+ 
+    /* ModRM */
+    *prog++ = mod | ((reg_val & 7u) << 3) | base3;
+ 
+    if (base3 == 4)
+      *prog++ = 0x24u;  
+ 
+    /* Displacement */
+    if (mod == 0x40) {
+      *prog++ = (u8)(s8)mem_off;
+    } else if (mod == 0x80) {
+      s32 d = (s32)mem_off;
+      *prog++ = (u8)(d);
+      *prog++ = (u8)(d >> 8);
+      *prog++ = (u8)(d >> 16);
+      *prog++ = (u8)(d >> 24);
+    }
+  }
+  
+  {
+    int len = (int)(prog - emit_start);
+    u8 buf[64];
+    char hexstr[128];
+    int pos = 0;
+    memcpy(buf, emit_start, len);
+    for (int i = 0; i < len; i++)
+      pos += snprintf(hexstr + pos, sizeof(hexstr) - pos, "%02x ", buf[i]);
+    pr_info("DAISY JIT sub_op=%d (%d byte): %s\n", sub_op, len, hexstr);
+  }  
 
   return prog;
 }
