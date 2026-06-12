@@ -1996,7 +1996,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		  s16 off = insn->off;
 
 		  /* invoke the dynamic emitter */
-		  emit_simd_alu(insn->code, dst_reg, src_reg, sub_op, off,  prog);
+	      prog = emit_simd_alu(insn->code, dst_reg, src_reg, sub_op, off,  prog);
 		  break;
 		 }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
