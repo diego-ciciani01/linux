@@ -15364,6 +15364,7 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			}
 		}
 	} else if (opcode == BPF_TIME){ /* axcept the BPF_TIME opcode*/
+        /*
 	      struct bpf_reg_state *dst_reg;
 
 	      dst_reg = regs + insn->dst_reg;
@@ -15384,6 +15385,9 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
               regs[insn->dst_reg].type = SCALAR_VALUE;
 
 	      return 0;
+        */
+        mark_reg_unknown(env, regs, insn->dst_reg);
+        regs[insn->dst_reg].type = SCALAR_VALUE;
 
 	} else {	/* all other ALU ops: and, sub, xor, add, ... */
 
@@ -18303,7 +18307,7 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 	case BPF_ARSH:
 	case BPF_MUL:
 	case BPF_DIV:
-	case BPF_MOD:
+    case BPF_MOD:
 		if (BPF_SRC(insn->code) == BPF_X) {
 			if (insn->imm != 0 || (insn->off != 0 && insn->off != 1) ||
 			    (insn->off == 1 && opcode != BPF_MOD && opcode != BPF_DIV)) {
@@ -18317,6 +18321,13 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 		return 0;
+    case BPF_TIME:
+       	if (BPF_SRC(insn->code) != BPF_K || class != BPF_ALU64 ||
+		    insn->src_reg != BPF_REG_0 || insn->off != 0 || insn->imm != 0) {
+			verbose(env, "BPF_TIME uses reserved fields\n");
+			return -EINVAL;
+		}
+        return 0;
 	default:
 		verbose(env, "invalid BPF_ALU opcode %x\n", opcode);
 		return -EINVAL;
