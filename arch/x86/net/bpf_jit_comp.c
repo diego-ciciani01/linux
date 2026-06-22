@@ -1826,7 +1826,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		case BPF_ALU | BPF_OR | BPF_K:
 		case BPF_ALU | BPF_XOR | BPF_K:
 		case BPF_ALU64 | BPF_ADD | BPF_K:
-		case BPF_ALU64 | BPF_SUB | BPF_K:
+      	case BPF_ALU64 | BPF_SUB | BPF_K:
 		case BPF_ALU64 | BPF_AND | BPF_K:
 		case BPF_ALU64 | BPF_OR | BPF_K:
 		case BPF_ALU64 | BPF_XOR | BPF_K:
@@ -1867,6 +1867,27 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			else
 				EMIT2_off32(0x81, add_1reg(b3, dst_reg), imm32);
 			break;
+        case BPF_ALU64 | BPF_TIME | BPF_K:
+            EMIT1(0x50);
+            EMIT1(0x52);
+
+            EMIT2(0x0F, 0x31);
+            EMIT4(0x48, 0xC1, 0xE2, 0x20);
+            EMIT3(0x48, 0x09, 0xD0);
+
+            if (dst_reg == BPF_REG_0) {
+                EMIT1(0x5A);                           /* pop rdx */
+                EMIT4(0x48, 0x83, 0xC4, 0x08);        /* add rsp, 8 */
+            } else if (dst_reg == BPF_REG_3) {
+                EMIT3(0x48, 0x89, 0xC2);              /* mov rdx, rax */
+                EMIT4(0x48, 0x83, 0xC4, 0x08);        /* add rsp, 8 */
+                EMIT1(0x58);                           /* pop rax */
+            } else {
+                emit_mov_reg(&prog, true, dst_reg, BPF_REG_0); /* dst = rax */
+                EMIT1(0x5A);                           /* pop rdx */
+                EMIT1(0x58);                           /* pop rax */
+            }
+            break;
 
 		case BPF_ALU64 | BPF_MOV | BPF_K:
 		case BPF_ALU | BPF_MOV | BPF_K:
