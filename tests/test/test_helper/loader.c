@@ -1,4 +1,4 @@
-#include <stddef.h> // <--- RISOLVE L'ERRORE "size_t"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

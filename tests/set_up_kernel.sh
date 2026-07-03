@@ -28,7 +28,7 @@ if [ -d "$KERNEL_DIR" ]; then
                         ./scripts/config --enable CONFIG_BPF_EVENTS
                         ./scripts/config --enable CONFIG_DEBUG_INFO
                         ./scripts/config --disable CONFIG_DEBUG_INFO_REDUCED
-                        ./scripts/config --enable CONFIG_DEBUG_INFO_BTF=y
+                        ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
                         ./scripts/config --enable CONFIG_BPF_JIT_ALWAYS_ON
                         # Rigenera il .config risolvendo le dipendenze automaticamente
                           make olddefconfig
@@ -82,6 +82,9 @@ mount -t sysfs none /sys
 mount -t devtmpfs none /dev
 mkdir -p /sys/fs/bpf
 mount -t bpf bpf /sys/fs/bpf/
+
+echo 1 > /proc/sys/net/core/bpf_jit_enable
+echo 1 > /proc/sys/kernel/bpf_stats_enabled
 
 ip link set lo up
 
