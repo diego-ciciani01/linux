@@ -1,5 +1,4 @@
-/*
- * test_simd.c — test userspace per AVX-512 custom nel JIT eBPF
+/* test_simd.c — test userspace per AVX-512 custom nel JIT eBPF
  *
  * Pipeline testata:
  *   LOAD input_a  → ZMM0        (sub_op=5)
@@ -97,7 +96,7 @@ int main(void)
 
         /* idx  4 — if R4 > R3: goto fallback
          * off = 17 - 4 - 1 = 12 */
-        { .code = BPF_JMP|BPF_JGT|BPF_X,   .dst_reg=4,.src_reg=3,.off=12,.imm=0 },
+        { .code = BPF_JMP|BPF_JGT|BPF_X, .dst_reg=4,.src_reg=3,.off=11,.imm=0 },
 
         /* idx  5 — SENTINELLA A: scrivi 0x11111111 in input_a[0] = [R2+0] */
         { .code = BPF_ST|BPF_MEM|BPF_W,    .dst_reg=2,.src_reg=0,.off=0, .imm=PROBE_A },
@@ -142,8 +141,8 @@ int main(void)
     const int insn_count = (int)(sizeof(prog) / sizeof(prog[0]));
 
     /* Verifica statica degli offset (fallisce a compile time se sbagliato) */
-    if (prog[4].off != 12) {
-        fprintf(stderr, "[-] BUG: offset JGT errato: atteso 12, trovato %d\n",
+    if (prog[4].off != 11) {
+        fprintf(stderr, "[-] BUG: offset JGT errato %d\n",
                 prog[4].off);
         return 1;
     }

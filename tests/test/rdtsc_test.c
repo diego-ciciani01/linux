@@ -53,7 +53,7 @@ int main(void) {
         BPF_RAW_INSN(0x85, 0,  0,  0,  1),   /* call lookup_elem     */
         BPF_RAW_INSN(0x15, 0,  0,  3,  0),   /* if r0==0 skip 3      */
         BPF_RAW_INSN(0xbf, 3,  0,  0,  0),   /* r3 = r0              */
-        BPF_RAW_INSN(0xc7, 1,  0,  0,  0),   /* *** rdtsc → r1 ***   */
+        BPF_RAW_INSN(0xf7, 1,  0,  0,  0),   /* *** rdtsc → r1 ***   */
         BPF_RAW_INSN(0x7b, 3,  1,  0,  0),   /* *(u64*)(r3) = r1     */
         BPF_RAW_INSN(0xb7, 0,  0,  0,  1),   /* r0 = 1               */
         BPF_RAW_INSN(0x95, 0,  0,  0,  0),   /* exit                 */

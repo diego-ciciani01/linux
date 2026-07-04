@@ -1,0 +1,149 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <linux/if_link.h>
+#include <linux/bpf.h>
+#include <bpf/libbpf.h>
+#include <bpf/bpf.h>
+
+#define N_PACKETS 1000
+
+static double read_cpu_mhz(void)
+{
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    if (!f) return 0;
+    char line[256]; double mhz = 0;
+    while (fgets(line, sizeof(line), f))
+        if (sscanf(line, "cpu MHz : %lf", &mhz) == 1) break;
+    fclose(f);
+    return mhz;
+}
+
+static void check_stats_enabled(void)
+{
+    FILE *f = fopen("/proc/sys/kernel/bpf_stats_enabled", "r");
+    if (!f) { printf("[WARN] non riesco a leggere bpf_stats_enabled\n"); return; }
+    int val = 0;
+    fscanf(f, "%d", &val);
+    fclose(f);
+    if (!val)
+        printf("[WARN] bpf_stats_enabled=0 — run_time_ns sarà 0\n");
+    else
+        printf("[OK] bpf_stats_enabled=1\n");
+}
+
+int main(void)
+{
+    check_stats_enabled();
+
+    /* 1. carica oggetto BPF */
+    struct bpf_object *obj = bpf_object__open("/bin/test_rdtsc/rdtsc.bpf.o");
+    if (!obj) { perror("[FAIL] open"); return 1; }
+    if (bpf_object__load(obj)) { perror("[FAIL] load"); return 1; }
+    printf("[OK] programma caricato\n");
+
+    struct bpf_program *prog =
+        bpf_object__find_program_by_name(obj, "rdtsc_prog");
+    if (!prog) { fprintf(stderr, "[FAIL] rdtsc_prog non trovato\n"); return 1; }
+    int prog_fd = bpf_program__fd(prog);
+
+    struct bpf_map *map =
+        bpf_object__find_map_by_name(obj, "compare_map");
+    if (!map) { fprintf(stderr, "[FAIL] compare_map non trovata\n"); return 1; }
+    int map_fd = bpf_map__fd(map);
+
+    printf("[OK] prog_fd=%d  map_fd=%d\n", prog_fd, map_fd);
+
+    /* 2. attacca a lo via XDP */
+    int ifindex = if_nametoindex("lo");
+    if (!ifindex) { perror("[FAIL] if_nametoindex"); return 1; }
+    if (bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL) < 0) {
+        perror("[FAIL] xdp_attach"); return 1;
+    }
+    printf("[OK] attaccato a lo (XDP)\n");
+
+    /* 3. triggera N_PACKETS volte, misurando run_time_ns delta */
+    struct sockaddr_in addr = {
+        .sin_family      = AF_INET,
+        .sin_port        = htons(9999),
+        .sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+    };
+    int tx = socket(AF_INET, SOCK_DGRAM, 0);
+    char pkt[] = "trigger";
+
+    struct bpf_prog_info info_before = {};
+    __u32 info_len = sizeof(info_before);
+    bpf_prog_get_info_by_fd(prog_fd, &info_before, &info_len);
+
+    printf("[..] invio %d pacchetti...\n", N_PACKETS);
+    for (int i = 0; i < N_PACKETS; i++) {
+        sendto(tx, pkt, sizeof(pkt), 0,
+               (struct sockaddr *)&addr, sizeof(addr));
+        usleep(100);
+    }
+    close(tx);
+    usleep(200000);
+
+    struct bpf_prog_info info_after = {};
+    info_len = sizeof(info_after);
+    bpf_prog_get_info_by_fd(prog_fd, &info_after, &info_len);
+
+    __u64 delta_cnt  = info_after.run_cnt     - info_before.run_cnt;
+    __u64 delta_time = info_after.run_time_ns - info_before.run_time_ns;
+
+    /* 4. leggi i 4 slot dalla mappa (ultimo pacchetto eseguito) */
+    __u32 k0 = 0, k1 = 1, k2 = 2, k3 = 3;
+    __u64 t1 = 0, t2 = 0, tsc_before = 0, tsc_after = 0;
+    bpf_map_lookup_elem(map_fd, &k0, &t1);
+    bpf_map_lookup_elem(map_fd, &k1, &t2);
+    bpf_map_lookup_elem(map_fd, &k2, &tsc_before);
+    bpf_map_lookup_elem(map_fd, &k3, &tsc_after);
+
+    /* 5. calcoli */
+    double mhz = read_cpu_mhz();
+    double hz  = mhz * 1e6;
+
+    __u64 cost_bpftime_cycles = t2 - t1;
+    __u64 cost_ktime_cycles   = tsc_after - tsc_before;
+
+    double cost_bpftime_ns = (hz > 0) ? (double)cost_bpftime_cycles / hz * 1e9 : 0;
+    double cost_ktime_ns   = (hz > 0) ? (double)cost_ktime_cycles   / hz * 1e9 : 0;
+    double avg_run_ns      = (delta_cnt > 0) ? (double)delta_time / delta_cnt : 0;
+
+    /* 6. stampa risultati completi */
+    printf("\n");
+    printf("============================================\n");
+    printf("  MISURAZIONE PERFORMANCE BPF\n");
+    printf("============================================\n");
+    printf("CPU: %.0f MHz\n\n", mhz);
+
+    printf("-- bpf_stats (run_time_ns / run_cnt) --\n");
+    printf("  run_cnt:       %llu esecuzioni\n", delta_cnt);
+    printf("  run_time_ns:   %llu ns totali\n",  delta_time);
+    printf("  media/run:     %.3f ns\n\n",        avg_run_ns);
+
+    printf("-- Costo BPF_TIME (rdtsc diretto) --\n");
+    printf("  %llu cicli  =  %.3f ns\n\n",
+           cost_bpftime_cycles, cost_bpftime_ns);
+
+    printf("-- Costo bpf_ktime_get_ns() --\n");
+    printf("  %llu cicli  =  %.3f ns\n\n",
+           cost_ktime_cycles, cost_ktime_ns);
+
+    printf("-- CONFRONTO DIRETTO --\n");
+    printf("  BPF_TIME:            %.3f ns\n", cost_bpftime_ns);
+    printf("  bpf_ktime_get_ns():  %.3f ns\n", cost_ktime_ns);
+    if (cost_bpftime_ns > 0)
+        printf("  Rapporto:            %.1fx più lento (ktime vs BPF_TIME)\n",
+               cost_ktime_ns / cost_bpftime_ns);
+    printf("\n");
+    printf("  Tempo totale programma (bpf_stats): %.3f ns/run\n", avg_run_ns);
+    printf("============================================\n");
+
+    bpf_xdp_detach(ifindex, XDP_FLAGS_SKB_MODE, NULL);
+    bpf_object__close(obj);
+    return 0;
+}
