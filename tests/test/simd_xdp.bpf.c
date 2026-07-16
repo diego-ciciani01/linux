@@ -4,12 +4,6 @@
 /* Tipo vettoriale 512 bit = 16 x int32 = 64 byte */
 typedef int bpf_zmm __attribute__((vector_size(64)));
 
-/* Builtin SIMD — il compilatore LLVM modificato le traduce in opcode 0xe7 */
-extern bpf_zmm __builtin_bpf_simd_load(void *base)           __asm__("llvm.bpf.simd.load");
-extern void    __builtin_bpf_simd_store(void *base, bpf_zmm v) __asm__("llvm.bpf.simd.store");
-extern bpf_zmm __builtin_bpf_simd_add(bpf_zmm a, bpf_zmm b)  __asm__("llvm.bpf.simd.add");
-extern bpf_zmm __builtin_bpf_simd_xor(bpf_zmm a, bpf_zmm b)  __asm__("llvm.bpf.simd.xor");
-
 /*
  * Pipeline SIMD:
  *   1. ZMM0 = LOAD [data + 0]      (input_a: 16 int)
@@ -21,6 +15,7 @@ extern bpf_zmm __builtin_bpf_simd_xor(bpf_zmm a, bpf_zmm b)  __asm__("llvm.bpf.s
  * Risultato per ogni corsia i:
  *   output_c[i] = (input_a[i] + input_b[i]) ^ input_b[i]
  */
+
 SEC("xdp")
 int simd_prog(struct xdp_md *ctx)
 {
