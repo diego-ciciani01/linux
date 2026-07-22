@@ -218,10 +218,9 @@ struct smb2_transform_hdr {
  * These are simplified versions from the spec, as we don't need a fully fledged
  * form of both unchained and chained structs.
  *
- * Moreover, even in chained compressed payloads, the initial compression header
- * has the form of the unchained one -- i.e. it never has the
- * OriginalPayloadSize field and ::Offset field always represent an offset
- * (instead of a length, as it is in the chained header).
+ * For chained payloads, only the first 8 bytes belong to the transform header.
+ * CompressionAlgorithm, Flags and Offset below overlay the first chained
+ * payload header, where Offset represents Length.
  *
  * See MS-SMB2 2.2.42 for more details.
  */
@@ -524,9 +523,7 @@ struct smb2_compression_capabilities_context {
 	__le16	CompressionAlgorithmCount;
 	__le16	Padding;
 	__le32	Flags;
-	__le16	CompressionAlgorithms[3];
-	__u16	Pad;  /* Some servers require pad to DataLen multiple of 8 */
-	/* Check if pad needed */
+	__le16	CompressionAlgorithms[4];
 } __packed;
 
 /*
@@ -1566,6 +1563,10 @@ struct validate_negotiate_info_rsp {
 #define FILE_STANDARD_LINK_INFORMATION	54
 #define FILE_ID_INFORMATION		59
 #define FILE_ID_EXTD_DIRECTORY_INFORMATION 60	/* also for QUERY_DIR */
+#define FileId64ExtdDirectoryInformation 78	/* also for QUERY_DIR */
+#define FileId64ExtdBothDirectoryInformation 79 /* also for QUERY_DIR */
+#define FileIdAllExtdDirectoryInformation 80	/* also for QUERY_DIR */
+#define FileIdAllExtdBothDirectoryInformation 81 /* also for QUERY_DIR */
 /* Used for Query Info and Find File POSIX Info for SMB3.1.1 and SMB1 */
 #define SMB_FIND_FILE_POSIX_INFO	0x064
 

@@ -1299,8 +1299,8 @@ static int bpf_jit_blind_insn(const struct bpf_insn *from,
 	u32 imm_rnd = get_random_u32();
 	s16 off;
 
-	BUILD_BUG_ON(BPF_REG_AX  + 1 != MAX_BPF_JIT_REG);
-	BUILD_BUG_ON(MAX_BPF_REG + 1 != MAX_BPF_JIT_REG);
+	BUILD_BUG_ON(BPF_REG_PARAMS + 2 != MAX_BPF_JIT_REG);
+	BUILD_BUG_ON(BPF_REG_AX + 1 != MAX_BPF_JIT_REG);
 
 	/* Constraints on AX register:
 	 *
@@ -1354,6 +1354,8 @@ static int bpf_jit_blind_insn(const struct bpf_insn *from,
 	case BPF_ALU64 | BPF_DIV | BPF_K:
     case BPF_ALU64 | BPF_SIMD | BPF_K:
     case BPF_ALU64 | BPF_MOD | BPF_K:
+	case BPF_ALU64 | BPF_TIME | BPF_K:
+	case BPF_ALU64 | BPF_MOD | BPF_K:
 		*to++ = BPF_ALU64_IMM(BPF_MOV, BPF_REG_AX, imm_rnd ^ from->imm);
 		*to++ = BPF_ALU64_IMM(BPF_XOR, BPF_REG_AX, imm_rnd);
 		*to++ = BPF_ALU64_REG_OFF(from->code, from->dst_reg, BPF_REG_AX, from->off);
@@ -1585,6 +1587,16 @@ bool bpf_insn_is_indirect_target(const struct bpf_verifier_env *env, const struc
 	insn_idx += prog->aux->subprog_start;
 	return env->insn_aux_data[insn_idx].indirect_target;
 }
+
+u16 bpf_out_stack_arg_cnt(const struct bpf_verifier_env *env, const struct bpf_prog *prog)
+{
+	const struct bpf_subprog_info *sub;
+
+	if (!env)
+		return 0;
+	sub = &env->subprog_info[prog->aux->func_idx];
+	return sub->stack_arg_cnt - bpf_in_stack_arg_cnt(sub);
+}
 #endif /* CONFIG_BPF_JIT */
 
 /* Base function for offset calculation. Needs to go into .text section,
@@ -1662,6 +1674,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, DIV,  K),			\
 	INSN_3(ALU64, SIMD, K),         \
 	INSN_3(ALU64, MOD,  K),			\
+	INSN_3(ALU64, TIME, K),		        \
 	/* Call instruction. */			\
 	INSN_2(JMP, CALL),			\
 	/* Exit instruction. */			\
@@ -1778,6 +1791,9 @@ static u32 abs_s32(s32 x)
 	return x >= 0 ? (u32)x : -(u32)x;
 }
 
+static u64 (*interpreters_args[])(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5,
+				  const struct bpf_insn *insn);
+
 /**
  *	___bpf_prog_run - run eBPF program on a given context
  *	@regs: is the array of MAX_BPF_EXT_REG eBPF pseudo-registers
@@ -1808,8 +1824,10 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_W] = &&LDX_PROBE_MEMSX_W,
 	    [BPF_ALU64 | BPF_SIMD | BPF_K] = &&ALU64_SIMD_K,
 	    [BPF_ALU64 | BPF_SIMD | BPF_X] = &&ALU64_SIMD_X,
+		/* Custom timestemp */
+		[BPF_ALU64 | BPF_TIME | BPF_K] = &&ALU64_TIME_K,
 
-    };
+	};
 #undef BPF_INSN_3_LBL
 #undef BPF_INSN_2_LBL
 	u32 tail_call_cnt = 0;
@@ -1844,7 +1862,7 @@ select_insn:
 		CONT;					\
 	ALU_##OPCODE##_K:				\
 		DST = (u32) DST OP (u32) IMM;		\
-		CONT;
+		CONT;                                   \
 	/* ALU (rest) */
 #define ALU(OPCODE, OP)					\
 	ALU64_##OPCODE##_X:				\
@@ -1910,6 +1928,14 @@ select_insn:
 	ALU64_MOV_K:
 		DST = IMM;
 		CONT;
+        ALU64_TIME_K: /* My custom code, timestempo implementation */
+		{
+		  u32 lo, hi;
+		  asm volatile("rdtsc" : "=a"(lo),"=d"(hi));
+		  DST = ((u64)hi << 32) | lo;
+
+		  CONT;
+		}
 	LD_IMM_DW:
 		DST = (u64) (u32) insn[0].imm | ((u64) (u32) insn[1].imm) << 32;
 		insn++;
@@ -2090,10 +2116,9 @@ select_insn:
 		CONT;
 
 	JMP_CALL_ARGS:
-		BPF_R0 = (__bpf_call_base_args + insn->imm)(BPF_R1, BPF_R2,
-							    BPF_R3, BPF_R4,
-							    BPF_R5,
-							    insn + insn->off + 1);
+		BPF_R0 = interpreters_args[insn->off](BPF_R1, BPF_R2, BPF_R3,
+						      BPF_R4, BPF_R5,
+						      insn + insn->imm + 1);
 		CONT;
 
 	JMP_TAIL_CALL: {
@@ -2408,13 +2433,22 @@ EVAL4(PROG_NAME_LIST, 416, 448, 480, 512)
 #undef PROG_NAME_LIST
 
 #ifdef CONFIG_BPF_SYSCALL
-void bpf_patch_call_args(struct bpf_insn *insn, u32 stack_depth)
+int bpf_patch_call_args(struct bpf_insn *insn, u32 stack_depth)
 {
 	stack_depth = max_t(u32, stack_depth, 1);
-	insn->off = (s16) insn->imm;
-	insn->imm = interpreters_args[(round_up(stack_depth, 32) / 32) - 1] -
-		__bpf_call_base_args;
+	/* Prevent out-of-bounds read to interpreters_args */
+	if (stack_depth > MAX_BPF_STACK)
+		return -EINVAL;
+	insn->off = (round_up(stack_depth, 32) / 32) - 1;
 	insn->code = BPF_JMP | BPF_CALL_ARGS;
+	return 0;
+}
+
+s32 bpf_call_args_imm(s16 idx)
+{
+	if (WARN_ON_ONCE(idx < 0 || idx >= ARRAY_SIZE(interpreters_args)))
+		return 0;
+	return BPF_CALL_IMM(interpreters_args[idx]);
 }
 #endif
 #endif
@@ -2474,7 +2508,7 @@ static bool __bpf_prog_map_compatible(struct bpf_map *map,
 			cookie = aux->cgroup_storage[i] ?
 				 aux->cgroup_storage[i]->cookie : 0;
 			ret = map->owner->storage_cookie[i] == cookie ||
-			      !cookie;
+			      (!cookie && !aux->tail_call_reachable);
 		}
 		if (ret &&
 		    map->owner->attach_func_proto != aux->attach_func_proto) {
@@ -3231,6 +3265,11 @@ bool __weak bpf_jit_supports_kfunc_call(void)
 	return false;
 }
 
+bool __weak bpf_jit_supports_stack_args(void)
+{
+	return false;
+}
+
 bool __weak bpf_jit_supports_far_kfunc_call(void)
 {
 	return false;
@@ -3366,6 +3405,12 @@ __weak u64 bpf_arena_get_kern_vm_start(struct bpf_arena *arena)
 }
 
 #ifdef CONFIG_BPF_SYSCALL
+__weak bool bpf_arena_handle_page_fault(unsigned long addr, bool is_write,
+					unsigned long fault_ip)
+{
+	return false;
+}
+
 static int __init bpf_global_ma_init(void)
 {
 	int ret;
