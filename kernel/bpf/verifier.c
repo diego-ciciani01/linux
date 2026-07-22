@@ -17607,11 +17607,47 @@ static int check_indirect_jump(struct bpf_verifier_env *env, struct bpf_insn *in
 
 static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 {
-	int err;
-	struct bpf_insn *insn = &env->prog->insnsi[env->insn_idx];
-	u8 class = BPF_CLASS(insn->code);
+  int err;
+  struct bpf_insn *insn = &env->prog->insnsi[env->insn_idx];
+  u8 class = BPF_CLASS(insn->code);
+  pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
+  /* accecpt the BPF_SIMD istruction */
+  if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
+    pr_info("DAISY DEBUG: >>> STO ESEGUENDO LA VERSIONE NUOVA (LIMITE 6) <<<\n");
+    pr_info("DAISY DEBUG: [OK] Rilevata istruzione SIMD custom!\n");
+    if (insn->dst_reg > 15 || insn->src_reg > 15 ){
+        verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
+        return -EINVAL;
+    }
 
-	switch (class) {
+    /* check the sub opcode of the imm field */
+    if (insn->imm < 1 || insn->imm > 6 ){
+      verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
+      return -EINVAL;
+    }
+
+    if (insn->imm == 5 || insn->imm==5){
+        struct bpf_func_state *cur_frame = env->cur_state->frame[env->cur_state->curframe];
+        u8 ptr_reg = (insn->imm == 5) ? insn->src_reg : insn->dst_reg;
+
+        struct bpf_reg_state *reg = &cur_frame->regs[ptr_reg];
+
+        if (reg->type != PTR_TO_PACKET){
+            verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET)\n");
+            return -EACCES;
+        }
+
+        /* check the range */
+        if (reg->umax_value + insn->off + 64 > reg->range) {
+            verbose(env, "AVX-512 Error: Out of range access for packet (OOB)\n");
+            return -EACCES;
+        }
+
+    }
+    return 0;
+  }
+
+  switch (class) {
 	case BPF_ALU:
 	case BPF_ALU64:
 		return check_alu_op(env, insn);
@@ -18329,6 +18365,18 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			verbose(env, "BPF_ALU uses reserved fields\n");
 			return -EINVAL;
 		}
+		return 0;
+    case 0xe0:
+		if (insn->dst_reg > 15 || insn->src_reg > 15) {
+			verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
+			return -EINVAL;
+		}
+
+		if (insn->imm < 1 || insn->imm > 6) {
+			verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
+			return -EINVAL;
+		}
+
 		return 0;
 	default:
 		verbose(env, "invalid BPF_ALU opcode %x\n", opcode);

@@ -19,6 +19,7 @@
 #include <asm/text-patching.h>
 #include <asm/unwind.h>
 #include <asm/cfi.h>
+#include <asm/fpu/api.h>
 
 static bool all_callee_regs_used[4] = {true, true, true, true};
 
@@ -61,6 +62,22 @@ static u8 *emit_code(u8 *ptr, u32 bytes, unsigned int len)
 #define EMIT_ENDBR()		do { } while (0)
 #define EMIT_ENDBR_POISON()	do { } while (0)
 #endif
+
+/* static array to to map bpf register with x86 */
+static const u8 bpf2x86[] = {
+	[BPF_REG_0] = 0,    /* returned value */
+	[BPF_REG_1] = 7,              /* %rdi */
+	[BPF_REG_2] = 6,              /* %rsi */
+	[BPF_REG_3] = 2,              /* %rdx */
+	[BPF_REG_4] = 1,              /* %rcx */
+	[BPF_REG_5] = 8,              /* %r8  */
+	[BPF_REG_6] = 3,              /* %rbx */
+	[BPF_REG_7] = 13,             /* %r13 */
+	[BPF_REG_8] = 14,             /* %r14 */
+	[BPF_REG_9] = 15,             /* %r15 */
+	[BPF_REG_10] = 5,             /* %rbp (Frame Pointer) */
+	[BPF_REG_AX] = 11,            /* %r11 */
+};
 
 static bool is_imm8(int value)
 {
@@ -1648,6 +1665,209 @@ static int emit_spectre_bhb_barrier(u8 **pprog, u8 *ip,
 	*pprog = prog;
 	return 0;
 }
+/* emit fpu for simd*/
+
+static u8 *emit_save_bpf_caller_regs(u8 *prog)
+{
+    /* Allign frame to 16 */
+    *prog++ = 0x55;                         /* PUSH RBP */
+    *prog++ = 0x48; *prog++ = 0x89;
+    *prog++ = 0xE5;                         /* MOV RBP, RSP */
+    *prog++ = 0x48; *prog++ = 0x83;
+    *prog++ = 0xE4; *prog++ = 0xF0;         /* AND RSP, -16 */
+
+    /* Push */
+    *prog++ = 0x41; *prog++ = 0x50;         /* PUSH R8  (BPF R5) */
+    *prog++ = 0x51;                         /* PUSH RCX (BPF R4) */
+    *prog++ = 0x52;                         /* PUSH RDX (BPF R3) */
+    *prog++ = 0x56;                         /* PUSH RSI (BPF R2) */
+    *prog++ = 0x57;                         /* PUSH RDI (BPF R1) */
+    *prog++ = 0x50;                         /* PUSH RAX (BPF R0) ← RSP 16-aligned ✓ */
+
+    return prog;
+}
+
+/* emit_kernel_call_abs emit a abosulute call at one function, bacause of the JIT code can be allocated a 2 GB far from the kernel functins */
+static u8 *emit_kernel_call_abs(u8 *prog, void *func)
+{
+    u64 addr = (u64)func;
+
+    /* MOVABS RAX, imm64 (10 byte: REX.W + opcode B8 + 8 byte addr) */
+    *prog++ = 0x48;
+    *prog++ = 0xB8;
+    memcpy(prog, &addr, 8);
+    prog += 8;
+
+    /* CALL RAX (2 byte) */
+    *prog++ = 0xFF;
+    *prog++ = 0xD0;
+
+    return prog;
+}
+
+
+static u8 *emit_restore_bpf_caller_regs(u8 *prog)
+{
+    *prog++ = 0x58;                         /* POP RAX */
+    *prog++ = 0x5F;                         /* POP RDI */
+    *prog++ = 0x5E;                         /* POP RSI */
+    *prog++ = 0x5A;                         /* POP RDX */
+    *prog++ = 0x59;                         /* POP RCX */
+    *prog++ = 0x41; *prog++ = 0x58;         /* POP R8  */
+
+    *prog++ = 0x48; *prog++ = 0x89;
+    *prog++ = 0xEC;                         /* MOV RSP, RBP */
+    *prog++ = 0x5D;                         /* POP RBP */
+
+    return prog;
+}
+
+
+static u8 * emit_fpu_begin(u8 *prog)
+{
+  prog = emit_save_bpf_caller_regs(prog);
+  prog = emit_kernel_call_abs(prog, kernel_fpu_begin);
+  prog = emit_restore_bpf_caller_regs(prog);
+
+  return prog;
+
+}
+
+static u8 *emit_fpu_end(u8 *prog)
+{
+    prog = emit_save_bpf_caller_regs(prog);
+    prog = emit_kernel_call_abs(prog, kernel_fpu_end);
+    prog = emit_restore_bpf_caller_regs(prog);
+    return prog;
+}
+
+
+/* emit simd istruction for EVEX,
+   this bytecode is used to extend the byte of x86 to the vector operations (AVX-512)
+ */
+static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
+{
+  u8 evex_p0, evex_p1, evex_p2;
+  u8 x86_op;
+  u8 mm, pp;
+  u8 reg_val; /* field '/r' "reg" in ModRM */
+  u8 rm_val; /*  field '/r' side "rm" in ModRM  */
+  u8 v_reg;  /* vvvv register */
+  bool is_mem = false;
+
+  switch(sub_op){
+  /* ---------------------- VPADD ------------------------- */
+  case(1):
+    x86_op = 0xFE;
+    mm = 1; /* map 0F */
+    pp = 1; /* prefix 66 */
+    reg_val = dst; /* ZMM destination */
+    rm_val = src; /* second source */
+    v_reg = dst;
+    break;
+    /* ---------------------- VPXORD --------------------------- */
+  case(4): /* vpxord */
+    x86_op = 0xEF;
+    mm = 1;        /* map 0F38 */
+    pp = 1;        /* prefix 66 */
+    reg_val = dst;
+    rm_val = src;
+    v_reg = dst;
+    break;
+    /* --------------------------- VMOVDQU32 [gpr_src + off] --------------------------  */
+
+  case(5): /* Memory -> ZMM */
+    x86_op = 0x6F;
+    mm = 1;        /* map 0F */
+    pp = 2;        /* prefix F3 */
+    reg_val = dst;          /* ZMM destination */
+    rm_val = bpf2x86[src];  /* register eBPF (mapped in x86) - GPR*/
+    v_reg = 0x0F;           /* not used on mov */
+    is_mem = true;
+    break;
+
+  case(6): /* ZMM -> Memory */
+    x86_op = 0x7F;
+    mm = 1;        /* map 0F */
+    pp = 2;        /* prefix F3 */
+    reg_val = src;          /* ZMM source to save */
+    rm_val = bpf2x86[dst]; /* register eBPF (mapped in x86) - GPR*/
+    v_reg = 0x0F;
+    is_mem = true;
+    break;
+  default:
+    return prog;
+  }
+
+  /* build EVEX */
+
+  /* ------------------ EVEX P0 ----------------- */
+  evex_p0 = ((~reg_val & 0x8u) << 4) |0x40u | ((~rm_val & 0x8u) << 2) | 0x10u | (mm & 0x3u); /* some '&' are used to do not pollute the byte*/
+
+  /* ----------------- EVEX P1 --------------- */
+
+  /* build the EVEX P1: [ W v v v v 1 p p ]  */
+  u8 vvvv = (v_reg == 0x0F) ? 0x0Fu : (~v_reg & 0x0Fu);
+  evex_p1 = (vvvv << 3) | 0x04u | (pp & 0x3u);
+
+  /* ------------ EVEX P2 fixed value ----------- */
+  evex_p2 = 0x48;
+
+  /* --------------- Emission byte ---------------- */
+  u8 *emit_start = prog;
+  *prog++ = 0x62;
+  *prog++ = evex_p0;
+  *prog++ = evex_p1;
+  *prog++ = evex_p2;
+  *prog++ = x86_op;
+
+
+  if (!is_mem){
+    *prog++ = 0xc0u | ((reg_val & 7u) << 3) | (rm_val & 7u);
+    /* Istruction register to register mod = 11 */
+  }else {
+    u8 base3 = rm_val & 7u;
+    u8 mod;
+
+    if (off == 0 && base3 != 5) {
+      mod = 0x00;   /* [reg] */
+    } else if (off >= -128 && off <= 127) {
+      mod = 0x40;   /* [reg+disp8] — 1 byte displacement */
+    } else {
+      mod = 0x80;   /* [reg+disp32]— 4 byte displacement */
+    }
+
+    /* ModRM */
+    *prog++ = mod | ((reg_val & 7u) << 3) | base3;
+
+    if (base3 == 4)
+      *prog++ = 0x24u;
+
+    /* Displacement */
+    if (mod == 0x40) {
+      *prog++ = (u8)(s8)off;
+    } else if (mod == 0x80) {
+      s32 d = (s32)off;
+      *prog++ = (u8)(d);
+      *prog++ = (u8)(d >> 8);
+      *prog++ = (u8)(d >> 16);
+      *prog++ = (u8)(d >> 24);
+    }
+  }
+
+  {
+    int len = (int)(prog - emit_start);
+    u8 buf[64];
+    char hexstr[128];
+    int pos = 0;
+    memcpy(buf, emit_start, len);
+    for (int i = 0; i < len; i++)
+      pos += snprintf(hexstr + pos, sizeof(hexstr) - pos, "%02x ", buf[i]);
+    pr_info("DAISY JIT sub_op=%d (%d byte): %s\n", sub_op, len, hexstr);
+  }
+
+  return prog;
+}
 
 static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *addrs, u8 *image,
 		  u8 *rw_image, int oldproglen, struct jit_context *ctx, bool jmp_padding)
@@ -1673,6 +1893,13 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		priv_frame_ptr = priv_stack_ptr + PRIV_STACK_GUARD_SZ + round_up(stack_depth, 8);
 		stack_depth = 0;
 	}
+	bool has_simd = false;
+	for (int _i = 0; _i < insn_cnt; _i++) {
+		if (bpf_prog->insnsi[_i].code == 0xe7) {
+			has_simd = true;
+			break;
+		}
+	}
 
 	arena_vm_start = bpf_arena_get_kern_vm_start(bpf_prog->aux->arena);
 	user_vm_start = bpf_arena_get_user_vm_start(bpf_prog->aux->arena);
@@ -1685,6 +1912,10 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 
 	bpf_prog->aux->ksym.fp_start = prog - temp;
 
+	if (has_simd) {
+        pr_info("DAISY: emitting kernel_fpu_begin call\n");
+        prog = emit_fpu_begin(prog);
+	}
 	/* Exception callback will clobber callee regs for its own use, and
 	 * restore the original callee regs from main prog's stack frame.
 	 */
@@ -1757,6 +1988,17 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			EMIT2(b2, add_2reg(0xC0, dst_reg, src_reg));
 			break;
 
+		/* ALU64 and SIMD */
+		case BPF_ALU64 | BPF_SIMD:{
+		  u8 dst_reg = insn->dst_reg;
+		  u8 src_reg = insn->src_reg;
+		  s32 sub_op = insn->imm;
+		  s16 off = insn->off;
+
+		  /* invoke the dynamic emitter */
+	      prog = emit_simd_alu(insn->code, dst_reg, src_reg, sub_op, off,  prog);
+		  break;
+		 }
 		case BPF_ALU64 | BPF_MOV | BPF_X:
 			if (insn_is_cast_user(insn)) {
 				if (dst_reg != src_reg)
@@ -2724,6 +2966,10 @@ emit_jmp:
 			break;
 
 		case BPF_JMP | BPF_EXIT:
+            if (has_simd) {
+            	pr_info("DAISY: emitting kernel_fpu_end call\n");
+                prog = emit_fpu_end(prog);
+        	}
 			if (seen_exit) {
 				jmp_offset = ctx->cleanup_addr - addrs[i];
 				goto emit_jmp;

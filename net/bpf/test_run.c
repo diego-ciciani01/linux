@@ -24,6 +24,7 @@
 #include <net/netdev_rx_queue.h>
 #include <net/xdp.h>
 #include <net/netfilter/nf_bpf_link.h>
+#include <asm/fpu/api.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/bpf_test_run.h>
@@ -1312,7 +1313,7 @@ int bpf_prog_test_run_xdp(struct bpf_prog *prog, const union bpf_attr *kattr,
 	int i, ret = -EINVAL;
 	struct xdp_md *ctx;
 	void *data;
-
+    //kernel_fpu_begin();
 	if (prog->expected_attach_type == BPF_XDP_DEVMAP ||
 	    prog->expected_attach_type == BPF_XDP_CPUMAP)
 		return -EINVAL;
@@ -1456,6 +1457,8 @@ free_data:
 free_ctx:
 	kfree(ctx);
 	return ret;
+
+//kernel_fpu_end();
 }
 
 static int verify_user_bpf_flow_keys(struct bpf_flow_keys *ctx)
