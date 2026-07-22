@@ -1352,7 +1352,8 @@ static int bpf_jit_blind_insn(const struct bpf_insn *from,
 	case BPF_ALU64 | BPF_MUL | BPF_K:
 	case BPF_ALU64 | BPF_MOV | BPF_K:
 	case BPF_ALU64 | BPF_DIV | BPF_K:
-	case BPF_ALU64 | BPF_MOD | BPF_K:
+    case BPF_ALU64 | BPF_SIMD | BPF_K:
+    case BPF_ALU64 | BPF_MOD | BPF_K:
 		*to++ = BPF_ALU64_IMM(BPF_MOV, BPF_REG_AX, imm_rnd ^ from->imm);
 		*to++ = BPF_ALU64_IMM(BPF_XOR, BPF_REG_AX, imm_rnd);
 		*to++ = BPF_ALU64_REG_OFF(from->code, from->dst_reg, BPF_REG_AX, from->off);
@@ -1642,7 +1643,8 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, ARSH, X),			\
 	INSN_3(ALU64, DIV,  X),			\
 	INSN_3(ALU64, MOD,  X),			\
-	INSN_2(ALU64, NEG),			\
+	INSN_3(ALU64, SIMD, X),         \
+    INSN_2(ALU64, NEG),			    \
 	INSN_3(ALU64, END, TO_LE),		\
 	/*   Immediate based. */		\
 	INSN_3(ALU64, ADD,  K),			\
@@ -1656,6 +1658,7 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(ALU64, MOV,  K),			\
 	INSN_3(ALU64, ARSH, K),			\
 	INSN_3(ALU64, DIV,  K),			\
+	INSN_3(ALU64, SIMD, K),         \
 	INSN_3(ALU64, MOD,  K),			\
 	/* Call instruction. */			\
 	INSN_2(JMP, CALL),			\
@@ -1799,7 +1802,10 @@ static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_B] = &&LDX_PROBE_MEMSX_B,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_H] = &&LDX_PROBE_MEMSX_H,
 		[BPF_LDX | BPF_PROBE_MEMSX | BPF_W] = &&LDX_PROBE_MEMSX_W,
-	};
+	    [BPF_ALU64 | BPF_SIMD | BPF_K] = &&ALU64_SIMD_K,
+	    [BPF_ALU64 | BPF_SIMD | BPF_X] = &&ALU64_SIMD_X,
+
+    };
 #undef BPF_INSN_3_LBL
 #undef BPF_INSN_2_LBL
 	u32 tail_call_cnt = 0;
@@ -1928,6 +1934,9 @@ select_insn:
 			break;
 		}
 		CONT;
+    ALU64_SIMD_K: /* for future architecture adds the behaviour */
+    ALU64_SIMD_X:
+        return 0;
 	ALU_MOD_X:
 		switch (OFF) {
 		case 0:
