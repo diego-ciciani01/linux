@@ -1926,6 +1926,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		priv_frame_ptr = priv_stack_ptr + PRIV_STACK_GUARD_SZ + round_up(stack_depth, 8);
 		stack_depth = 0;
 	}
+	pr_info("DAISY_MARKER_A: entered SIMD detection\n");
 	bool has_simd = false;
 	for (int _i = 0; _i < insn_cnt; _i++) {
 		if (bpf_prog->insnsi[_i].code == 0xe7) {
@@ -1934,6 +1935,15 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 		}
 	}
 
+	pr_info("DAISY_MARKER_B: name='%s' initial_simd=%d\n",
+	bpf_prog->aux->name, has_simd);
+
+	if (!strcmp(bpf_prog->aux->name, "fpu_only")) {
+	pr_info("DAISY_MARKER_C: forcing FPU\n");
+	has_simd = true;
+	}
+
+	pr_info("DAISY_MARKER_D: final has_simd=%d\n", has_simd);
 	/*
 	 * Follow x86-64 calling convention for both BPF-to-BPF and
 	 * kfunc calls:
@@ -1968,8 +1978,8 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 	bpf_prog->aux->ksym.fp_start = prog - temp;
 
 	if (has_simd) {
-        pr_info("DAISY: emitting kernel_fpu_begin call\n");
-        prog = emit_fpu_begin(prog);
+        pr_info("DAISY_MARKER_E: emitting FPU BEGIN\n");
+	prog = emit_fpu_begin(prog);
 	}
 	/* Exception callback will clobber callee regs for its own use, and
 	 * restore the original callee regs from main prog's stack frame.
