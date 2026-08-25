@@ -1898,6 +1898,20 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
   return prog;
 }
 
+static noinline void bpf_simd_bench_nop(void)
+{
+    barrier();
+}
+
+static u8 *emit_bench_nop_call(u8 *prog)
+{
+    prog = emit_save_bpf_caller_regs(prog);
+    prog = emit_kernel_call_abs(prog, bpf_simd_bench_nop);
+    prog = emit_restore_bpf_caller_regs(prog);
+
+    return prog;
+}
+
 static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *addrs, u8 *image,
 		  u8 *rw_image, int oldproglen, struct jit_context *ctx, bool jmp_padding)
 {
@@ -1937,10 +1951,13 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 
 	pr_info("DAISY_MARKER_B: name='%s' initial_simd=%d\n",
 	bpf_prog->aux->name, has_simd);
+	
+	bool force_call_bench = false;
 
-	if (!strcmp(bpf_prog->aux->name, "fpu_only")) {
-	pr_info("DAISY_MARKER_C: forcing FPU\n");
-	has_simd = true;
+	if (!strcmp(bpf_prog->aux->name, "call_only")) {
+	//pr_info("DAISY_MARKER_C: forcing FPU\n");
+	//has_simd = true;
+	force_call_bench = true;
 	}
 
 	pr_info("DAISY_MARKER_D: final has_simd=%d\n", has_simd);
@@ -1974,6 +1991,11 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 	emit_prologue(&prog, image, stack_depth,
 		      bpf_prog_was_classic(bpf_prog), tail_call_reachable,
 		      bpf_is_subprog(bpf_prog), bpf_prog->aux->exception_cb);
+
+	if (force_call_bench)
+		    prog = emit_bench_nop_call(prog);
+	else if (has_simd)
+		    prog = emit_fpu_begin(prog);
 
 	bpf_prog->aux->ksym.fp_start = prog - temp;
 
@@ -3128,10 +3150,15 @@ emit_jmp:
 			break;
 
 		case BPF_JMP | BPF_EXIT:
-            if (has_simd) {
-            	pr_info("DAISY: emitting kernel_fpu_end call\n");
-                prog = emit_fpu_end(prog);
-        	}
+          	  /*if (has_simd) {
+            		pr_info("DAISY: emitting kernel_fpu_end call\n");
+               	 	prog = emit_fpu_end(prog);
+        		}
+		*/
+			if (force_call_bench)
+			    prog = emit_bench_nop_call(prog);
+			 else if (has_simd)
+			      prog = emit_fpu_end(prog);
 			if (seen_exit) {
 				jmp_offset = ctx->cleanup_addr - addrs[i];
 				goto emit_jmp;
