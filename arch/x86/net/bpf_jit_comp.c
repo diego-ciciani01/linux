@@ -1967,10 +1967,6 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 
 	bpf_prog->aux->ksym.fp_start = prog - temp;
 
-	if (has_simd) {
-        pr_info("DAISY: emitting kernel_fpu_begin call\n");
-        prog = emit_fpu_begin(prog);
-	}
 	/* Exception callback will clobber callee regs for its own use, and
 	 * restore the original callee regs from main prog's stack frame.
 	 */
@@ -3118,10 +3114,6 @@ emit_jmp:
 			break;
 
 		case BPF_JMP | BPF_EXIT:
-            if (has_simd) {
-            	pr_info("DAISY: emitting kernel_fpu_end call\n");
-                prog = emit_fpu_end(prog);
-        	}
 			if (seen_exit) {
 				jmp_offset = ctx->cleanup_addr - addrs[i];
 				goto emit_jmp;

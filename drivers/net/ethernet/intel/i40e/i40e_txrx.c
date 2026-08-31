@@ -11,7 +11,7 @@
 #include "i40e_txrx_common.h"
 #include "i40e_trace.h"
 #include "i40e_xsk.h"
-
+#include <linux/module.h>
 #define I40E_TXD_CMD (I40E_TX_DESC_CMD_EOP | I40E_TX_DESC_CMD_RS)
 /**
  * i40e_fdir - Generate a Flow Director descriptor based on fdata
@@ -20,6 +20,15 @@
  * @add: Indicate if we are adding a rule or deleting one
  *
  **/
+
+static bool daisy_fpu_napi = true;
+
+module_param(daisy_fpu_napi, bool, 0644);
+MODULE_PARM_DESC(daisy_fpu_napi,
+		                 "Enable DAISY kernel FPU management around NAPI RX");
+
+
+
 static void i40e_fdir(struct i40e_ring *tx_ring,
 		      struct i40e_fdir_filter *fdata, bool add)
 {
@@ -2742,113 +2751,154 @@ static inline void i40e_update_enable_itr(struct i40e_vsi *vsi,
  **/
 int i40e_napi_poll(struct napi_struct *napi, int budget)
 {
-	struct i40e_q_vector *q_vector =
-			       container_of(napi, struct i40e_q_vector, napi);
-	struct i40e_vsi *vsi = q_vector->vsi;
-	struct i40e_ring *ring;
-	bool tx_clean_complete = true;
-	bool rx_clean_complete = true;
-	unsigned int tx_cleaned = 0;
-	unsigned int rx_cleaned = 0;
-	bool clean_complete = true;
-	bool arm_wb = false;
-	int budget_per_ring;
-	int work_done = 0;
+        struct i40e_q_vector *q_vector =
+                               container_of(napi, struct i40e_q_vector, napi);
+        struct i40e_vsi *vsi = q_vector->vsi;
+        struct i40e_ring *ring;
+        bool tx_clean_complete = true;
+        bool rx_clean_complete = true;
+        unsigned int tx_cleaned = 0;
+        unsigned int rx_cleaned = 0;
+        bool clean_complete = true;
+        bool arm_wb = false;
+        int budget_per_ring;
+        int work_done = 0;
+        bool fpu_active = false;
 
-	if (test_bit(__I40E_VSI_DOWN, vsi->state)) {
-		napi_complete(napi);
-		return 0;
-	}
+        if (test_bit(__I40E_VSI_DOWN, vsi->state)) {
+                napi_complete(napi);
+                return 0;
+        }
 
-	/* Since the actual Tx work is minimal, we can give the Tx a larger
-	 * budget and be more aggressive about cleaning up the Tx descriptors.
-	 */
-	i40e_for_each_ring(ring, q_vector->tx) {
-		bool wd = ring->xsk_pool ?
-			  i40e_clean_xdp_tx_irq(vsi, ring) :
-			  i40e_clean_tx_irq(vsi, ring, budget, &tx_cleaned);
+        /*
+         * TX cleaning.
+         *
+         * Non serve tenere attiva la FPU qui:
+         * il programma XDP RX non viene eseguito in questa parte.
+         */
+        i40e_for_each_ring(ring, q_vector->tx) {
+                bool wd = ring->xsk_pool ?
+                          i40e_clean_xdp_tx_irq(vsi, ring) :
+                          i40e_clean_tx_irq(vsi, ring, budget, &tx_cleaned);
 
-		if (!wd) {
-			clean_complete = tx_clean_complete = false;
-			continue;
-		}
-		arm_wb |= ring->arm_wb;
-		ring->arm_wb = false;
-	}
+                if (!wd) {
+                        clean_complete = tx_clean_complete = false;
+                        continue;
+                }
 
-	/* Handle case where we are called by netpoll with a budget of 0 */
-	if (budget <= 0)
-		goto tx_only;
+                arm_wb |= ring->arm_wb;
+                ring->arm_wb = false;
+        }
 
-	/* normally we have 1 Rx ring per q_vector */
-	if (unlikely(q_vector->num_ringpairs > 1))
-		/* We attempt to distribute budget to each Rx queue fairly, but
-		 * don't allow the budget to go below 1 because that would exit
-		 * polling early.
-		 */
-		budget_per_ring = max_t(int, budget / q_vector->num_ringpairs, 1);
-	else
-		/* Max of 1 Rx ring in this q_vector so give it the budget */
-		budget_per_ring = budget;
+        /*
+         * Netpoll con budget 0: nessun processing RX/XDP.
+         * Quindi non serve kernel_fpu_begin().
+         */
+        if (budget <= 0)
+                goto tx_only;
 
+        if (unlikely(q_vector->num_ringpairs > 1))
+                budget_per_ring =
+                        max_t(int,
+                              budget / q_vector->num_ringpairs,
+                              1);
+        else
+                budget_per_ring = budget;
+
+        /*
+         * DAISY:
+         * SIMD/FPU context management at NAPI RX granularity.
+         *
+         * XDP programs are executed from the RX cleaning path,
+         * therefore the FPU context is enabled once around the
+         * whole RX portion of this NAPI poll.
+         */
+       if (daisy_fpu_napi) {
+        if (unlikely(!irq_fpu_usable())) {
+                pr_warn_once("DAISY_I40E: FPU not usable in NAPI RX path\n");
+        } else {
+                kernel_fpu_begin();
+                fpu_active = true;
+        }
+	} 
+	
+	
 	i40e_for_each_ring(ring, q_vector->rx) {
-		int cleaned = ring->xsk_pool ?
-			      i40e_clean_rx_irq_zc(ring, budget_per_ring) :
-			      i40e_clean_rx_irq(ring, budget_per_ring, &rx_cleaned);
+                int cleaned = ring->xsk_pool ?
+                              i40e_clean_rx_irq_zc(
+                                      ring,
+                                      budget_per_ring) :
+                              i40e_clean_rx_irq(
+                                      ring,
+                                      budget_per_ring,
+                                      &rx_cleaned);
 
-		work_done += cleaned;
-		/* if we clean as many as budgeted, we must not be done */
-		if (cleaned >= budget_per_ring)
-			clean_complete = rx_clean_complete = false;
+                work_done += cleaned;
+
+                if (cleaned >= budget_per_ring)
+                        clean_complete = rx_clean_complete = false;
+        }
+
+        /*
+         * IMPORTANT:
+         * close the FPU context immediately after RX/XDP.
+         *
+         * After this point the function is free to take any
+         * return path without leaking the kernel FPU state.
+         */
+        if (fpu_active){
+                kernel_fpu_end();
+	
+        pr_info_ratelimited(
+                "DAISY_I40E: kernel_fpu_end RX\n");
 	}
+        if (!i40e_enabled_xdp_vsi(vsi))
+                trace_i40e_napi_poll(napi, q_vector,
+                                     budget, budget_per_ring,
+                                     rx_cleaned, tx_cleaned,
+                                     rx_clean_complete,
+                                     tx_clean_complete);
 
-	if (!i40e_enabled_xdp_vsi(vsi))
-		trace_i40e_napi_poll(napi, q_vector, budget, budget_per_ring, rx_cleaned,
-				     tx_cleaned, rx_clean_complete, tx_clean_complete);
+        /*
+         * If work not completed, return budget and polling
+         * will continue.
+         */
+        if (!clean_complete) {
+                int cpu_id = smp_processor_id();
 
-	/* If work not completed, return budget and polling will return */
-	if (!clean_complete) {
-		int cpu_id = smp_processor_id();
+                if (!cpumask_test_cpu(
+                            cpu_id,
+                            &q_vector->affinity_mask)) {
+                        napi_complete_done(napi, work_done);
 
-		/* It is possible that the interrupt affinity has changed but,
-		 * if the cpu is pegged at 100%, polling will never exit while
-		 * traffic continues and the interrupt will be stuck on this
-		 * cpu.  We check to make sure affinity is correct before we
-		 * continue to poll, otherwise we must stop polling so the
-		 * interrupt can move to the correct cpu.
-		 */
-		if (!cpumask_test_cpu(cpu_id, &q_vector->affinity_mask)) {
-			/* Tell napi that we are done polling */
-			napi_complete_done(napi, work_done);
+                        i40e_force_wb(vsi, q_vector);
 
-			/* Force an interrupt */
-			i40e_force_wb(vsi, q_vector);
+                        return budget - 1;
+                }
 
-			/* Return budget-1 so that polling stops */
-			return budget - 1;
-		}
 tx_only:
-		if (arm_wb) {
-			q_vector->tx.ring[0].tx_stats.tx_force_wb++;
-			i40e_enable_wb_on_itr(vsi, q_vector);
-		}
-		return budget;
-	}
+                if (arm_wb) {
+                        q_vector->tx.ring[0].
+                                tx_stats.tx_force_wb++;
 
-	if (q_vector->tx.ring[0].flags & I40E_TXR_FLAGS_WB_ON_ITR)
-		q_vector->arm_wb_state = false;
+                        i40e_enable_wb_on_itr(vsi,
+                                             q_vector);
+                }
 
-	/* Exit the polling mode, but don't re-enable interrupts if stack might
-	 * poll us due to busy-polling
-	 */
-	if (likely(napi_complete_done(napi, work_done)))
-		i40e_update_enable_itr(vsi, q_vector);
-	else
-		q_vector->in_busy_poll = true;
+                return budget;
+        }
 
-	return min(work_done, budget - 1);
+        if (q_vector->tx.ring[0].flags &
+            I40E_TXR_FLAGS_WB_ON_ITR)
+                q_vector->arm_wb_state = false;
+
+        if (likely(napi_complete_done(napi, work_done)))
+                i40e_update_enable_itr(vsi, q_vector);
+        else
+                q_vector->in_busy_poll = true;
+
+        return min(work_done, budget - 1);
 }
-
 /**
  * i40e_atr - Add a Flow Director ATR filter
  * @tx_ring:  ring to add programming descriptor to
