@@ -1,0 +1,216 @@
+  SYNC    include/config/auto.conf.cmd
+  DESCEND objtool
+  DESCEND bpf/resolve_btfids
+  INSTALL libsubcmd_headers
+  INSTALL libbpf_headers
+  AR      kernel/bpf/built-in.a
+  AR      kernel/built-in.a
+  AR      built-in.a
+  AR      built-in-fixup.a
+  COPY    vmlinux.a
+  LD      vmlinux.o
+  GEN     .vmlinux.objs
+  MODPOST Module.symvers
+  UPD     include/generated/utsversion.h
+  CC      init/version-timestamp.o
+  KSYMS   .tmp_vmlinux0.kallsyms.S
+  AS      .tmp_vmlinux0.kallsyms.o
+  LD      .tmp_vmlinux1
+  BTF     .tmp_vmlinux1
+  NM      .tmp_vmlinux1.syms
+  KSYMS   .tmp_vmlinux1.kallsyms.S
+  AS      .tmp_vmlinux1.kallsyms.o
+  LD      .tmp_vmlinux2
+  NM      .tmp_vmlinux2.syms
+  KSYMS   .tmp_vmlinux2.kallsyms.S
+  AS      .tmp_vmlinux2.kallsyms.o
+  LD      vmlinux.unstripped
+  BTFIDS  vmlinux.unstripped
+  NM      System.map
+  SORTTAB vmlinux.unstripped
+  OBJCOPY vmlinux
+  GEN     modules.builtin.modinfo
+  GEN     modules.builtin
+  CC      arch/x86/boot/version.o
+  VOFFSET arch/x86/boot/compressed/../voffset.h
+  OBJCOPY arch/x86/boot/compressed/vmlinux.bin
+  RELOCS  arch/x86/boot/compressed/vmlinux.relocs
+  CC      arch/x86/boot/compressed/kaslr.o
+  LD [M]  arch/x86/events/intel/intel-cstate.ko
+  LD [M]  arch/x86/events/rapl.ko
+  LD [M]  arch/x86/crypto/aesni-intel.ko
+  LD [M]  arch/x86/kvm/kvm.ko
+  BTF [M] arch/x86/events/intel/intel-cstate.ko
+  BTF [M] arch/x86/events/rapl.ko
+  LD [M]  arch/x86/kvm/kvm-intel.ko
+  LD [M]  arch/x86/kvm/kvm-amd.ko
+  LD [M]  kernel/configs.ko
+  BTF [M] arch/x86/crypto/aesni-intel.ko
+  LD [M]  fs/nfs_common/nfs_acl.ko
+  LD [M]  fs/nfs_common/grace.ko
+  BTF [M] kernel/configs.ko
+  LD [M]  fs/nls/nls_iso8859-1.ko
+  LD [M]  fs/binfmt_misc.ko
+  LD [M]  fs/netfs/netfs.ko
+  LD [M]  fs/nfs/nfs.ko
+  LD [M]  fs/nfs/nfsv3.ko
+  LD [M]  fs/lockd/lockd.ko
+  BTF [M] fs/nfs_common/nfs_acl.ko
+  BTF [M] fs/nfs_common/grace.ko
+  LD [M]  fs/autofs/autofs4.ko
+  BTF [M] fs/nls/nls_iso8859-1.ko
+  LD [M]  crypto/async_tx/async_tx.ko
+  BTF [M] fs/binfmt_misc.ko
+  LD [M]  crypto/async_tx/async_memcpy.ko
+  LD [M]  crypto/async_tx/async_xor.ko
+  LD [M]  crypto/async_tx/async_pq.ko
+  LD [M]  crypto/async_tx/async_raid6_recov.ko
+  LD [M]  lib/crypto/gf128mul.ko
+  BTF [M] crypto/async_tx/async_tx.ko
+  LD [M]  lib/raid/xor/xor.ko
+  BTF [M] crypto/async_tx/async_memcpy.ko
+  LD [M]  lib/raid/raid6/raid6_pq.ko
+  BTF [M] crypto/async_tx/async_xor.ko
+  LD [M]  drivers/char/ipmi/ipmi_msghandler.ko
+  BTF [M] crypto/async_tx/async_pq.ko
+  BTF [M] lib/crypto/gf128mul.ko
+  LD [M]  drivers/char/ipmi/ipmi_devintf.ko
+  BTF [M] fs/nfs/nfsv3.ko
+  LD [M]  drivers/char/ipmi/ipmi_si.ko
+  BTF [M] arch/x86/kvm/kvm-amd.ko
+  LD [M]  drivers/char/ipmi/ipmi_ssif.ko
+  BTF [M] fs/autofs/autofs4.ko
+  BTF [M] crypto/async_tx/async_raid6_recov.ko
+  BTF [M] lib/raid/xor/xor.ko
+  LD [M]  drivers/acpi/acpi_ipmi.ko
+  LD [M]  drivers/acpi/nfit/nfit.ko
+  LD [M]  drivers/acpi/acpi_pad.ko
+  LD [M]  drivers/dma/ioat/ioatdma.ko
+  BTF [M] drivers/char/ipmi/ipmi_devintf.ko
+  LD [M]  drivers/gpu/drm/clients/drm_client_lib.ko
+  LD [M]  drivers/gpu/drm/drm.ko
+  LD [M]  drivers/gpu/drm/drm_shmem_helper.ko
+  LD [M]  drivers/gpu/drm/drm_kms_helper.ko
+  BTF [M] drivers/char/ipmi/ipmi_ssif.ko
+  BTF [M] lib/raid/raid6/raid6_pq.ko
+  BTF [M] drivers/acpi/acpi_ipmi.ko
+  BTF [M] drivers/char/ipmi/ipmi_msghandler.ko
+  BTF [M] drivers/acpi/acpi_pad.ko
+  BTF [M] drivers/gpu/drm/clients/drm_client_lib.ko
+  BTF [M] drivers/gpu/drm/drm_shmem_helper.ko
+  BTF [M] drivers/char/ipmi/ipmi_si.ko
+  BTF [M] drivers/acpi/nfit/nfit.ko
+  BTF [M] drivers/dma/ioat/ioatdma.ko
+  BTF [M] arch/x86/kvm/kvm-intel.ko
+  BTF [M] fs/lockd/lockd.ko
+  BTF [M] fs/netfs/netfs.ko
+  LD [M]  drivers/gpu/drm/mgag200/mgag200.ko
+  BTF [M] fs/nfs/nfs.ko
+  BTF [M] drivers/gpu/drm/drm_kms_helper.ko
+  BTF [M] drivers/gpu/drm/mgag200/mgag200.ko
+  LD [M]  drivers/misc/mei/mei.ko
+  LD [M]  drivers/misc/mei/mei-me.ko
+  LD [M]  drivers/mfd/lpc_ich.ko
+  LD [M]  drivers/macintosh/mac_hid.ko
+  BTF [M] drivers/misc/mei/mei-me.ko
+  LD [M]  drivers/scsi/raid_class.ko
+  BTF [M] drivers/gpu/drm/drm.ko
+  BTF [M] drivers/mfd/lpc_ich.ko
+  BTF [M] drivers/macintosh/mac_hid.ko
+  LD [M]  drivers/scsi/scsi_transport_sas.ko
+  LD [M]  drivers/scsi/mpt3sas/mpt3sas.ko
+  BTF [M] drivers/misc/mei/mei.ko
+  LD [M]  drivers/ata/ahci.ko
+  LD [M]  drivers/ata/libahci.ko
+  LD [M]  drivers/ata/acard-ahci.ko
+  BTF [M] drivers/scsi/raid_class.ko
+  BTF [M] arch/x86/kvm/kvm.ko
+  LD [M]  drivers/ata/ahci_platform.ko
+  BTF [M] drivers/scsi/scsi_transport_sas.ko
+  BTF [M] drivers/ata/ahci.ko
+  LD [M]  drivers/ata/libahci_platform.ko
+  LD [M]  drivers/net/ethernet/broadcom/bnxt/bnxt_en.ko
+  BTF [M] drivers/ata/acard-ahci.ko
+  LD [M]  drivers/net/ethernet/intel/libie/libie.ko
+  LD [M]  drivers/net/ethernet/intel/libie/libie_adminq.ko
+  BTF [M] drivers/ata/libahci.ko
+  BTF [M] drivers/ata/ahci_platform.ko
+  BTF [M] drivers/ata/libahci_platform.ko
+  LD [M]  drivers/net/ethernet/intel/libie/libie_fwlog.ko
+  BTF [M] drivers/net/ethernet/intel/libie/libie.ko
+  BTF [M] drivers/net/ethernet/intel/libie/libie_adminq.ko
+  LD [M]  drivers/net/ethernet/intel/libeth/libeth.ko
+  BTF [M] drivers/net/ethernet/intel/libie/libie_fwlog.ko
+  LD [M]  drivers/net/ethernet/intel/ixgbe/ixgbe.ko
+  BTF [M] drivers/scsi/mpt3sas/mpt3sas.ko
+  LD [M]  drivers/net/ethernet/intel/i40e/i40e.ko
+  LD [M]  drivers/net/mdio.ko
+  LD [M]  drivers/input/input-leds.ko
+  BTF [M] drivers/net/ethernet/intel/libeth/libeth.ko
+  BTF [M] drivers/net/mdio.ko
+  LD [M]  drivers/input/joydev.ko
+  BTF [M] drivers/input/input-leds.ko
+  LD [M]  drivers/i2c/algos/i2c-algo-bit.ko
+  LD [M]  drivers/hwmon/acpi_power_meter.ko
+  LD [M]  drivers/hwmon/coretemp.ko
+  BTF [M] drivers/i2c/algos/i2c-algo-bit.ko
+  BTF [M] drivers/hwmon/acpi_power_meter.ko
+  BTF [M] drivers/input/joydev.ko
+  LD [M]  drivers/thermal/intel/intel_powerclamp.ko
+  LD [M]  drivers/thermal/intel/x86_pkg_temp_thermal.ko
+  BTF [M] drivers/hwmon/coretemp.ko
+  LD [M]  drivers/thermal/intel/intel_pch_thermal.ko
+  BTF [M] drivers/thermal/intel/intel_powerclamp.ko
+  BTF [M] drivers/thermal/intel/x86_pkg_temp_thermal.ko
+  BTF [M] drivers/net/ethernet/broadcom/bnxt/bnxt_en.ko
+  BTF [M] drivers/thermal/intel/intel_pch_thermal.ko
+  LD [M]  drivers/md/linear.ko
+  BTF [M] drivers/md/linear.ko
+  BTF [M] drivers/net/ethernet/intel/i40e/i40e.ko
+  LD [M]  drivers/md/raid0.ko
+  BTF [M] drivers/md/raid0.ko
+  LD [M]  drivers/md/raid1.ko
+  BTF [M] drivers/net/ethernet/intel/ixgbe/ixgbe.ko
+  LD [M]  drivers/md/raid10.ko
+  LD [M]  drivers/md/raid456.ko
+  LD [M]  drivers/edac/skx_edac.ko
+  LD [M]  drivers/edac/skx_edac_common.ko
+  LD [M]  drivers/edac/i10nm_edac.ko
+  LD [M]  drivers/firmware/efi/efi-pstore.ko
+  BTF [M] drivers/md/raid1.ko
+  LD [M]  drivers/hid/hid.ko
+  BTF [M] drivers/edac/skx_edac.ko
+  BTF [M] drivers/md/raid10.ko
+  LD [M]  drivers/hid/hid-generic.ko
+  BTF [M] drivers/edac/skx_edac_common.ko
+  LD [M]  drivers/hid/usbhid/usbhid.ko
+  LD [M]  drivers/platform/wmi/wmi.ko
+  BTF [M] drivers/firmware/efi/efi-pstore.ko
+  BTF [M] drivers/edac/i10nm_edac.ko
+  LD [M]  drivers/powercap/intel_rapl_common.ko
+  LD [M]  drivers/powercap/intel_rapl_msr.ko
+  LD [M]  drivers/dca/dca.ko
+  BTF [M] drivers/hid/hid-generic.ko
+  BTF [M] drivers/hid/usbhid/usbhid.ko
+  BTF [M] drivers/md/raid456.ko
+  BTF [M] drivers/powercap/intel_rapl_common.ko
+  BTF [M] drivers/hid/hid.ko
+  BTF [M] drivers/platform/wmi/wmi.ko
+  BTF [M] drivers/powercap/intel_rapl_msr.ko
+  LD [M]  net/sched/sch_fq_codel.ko
+  BTF [M] drivers/dca/dca.ko
+  LD [M]  net/sunrpc/sunrpc.ko
+  BTF [M] net/sched/sch_fq_codel.ko
+  CC      arch/x86/boot/compressed/misc.o
+  BTF [M] net/sunrpc/sunrpc.ko
+  ZSTD22  arch/x86/boot/compressed/vmlinux.bin.zst
+  MKPIGGY arch/x86/boot/compressed/piggy.S
+  AS      arch/x86/boot/compressed/piggy.o
+  LD      arch/x86/boot/compressed/vmlinux
+  ZOFFSET arch/x86/boot/zoffset.h
+  OBJCOPY arch/x86/boot/vmlinux.bin
+  AS      arch/x86/boot/header.o
+  LD      arch/x86/boot/setup.elf
+  OBJCOPY arch/x86/boot/setup.bin
+  BUILD   arch/x86/boot/bzImage
+Kernel: arch/x86/boot/bzImage is ready  (#6)
