@@ -1805,7 +1805,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     break;
    /* ------------------------ VPSRLD --------------------------- */
   case(3):
-    x86_op = 0x76;
+    x86_op = 0x72;
     mm = 1; 
     pp = 1; 
     reg_val = 2; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPSRLD) */
@@ -1843,7 +1843,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     break;
   /* ------------------------- VPROLD ------------------------ */
   case(7):
-    x86_op = 0x76;
+    x86_op = 0x72;
     mm = 1;        /* map 0F38 */
     pp = 1;        /* prefix 66 */
     reg_val = 1; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPROLD) */
@@ -1880,6 +1880,9 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
   if (!is_mem){
     *prog++ = 0xc0u | ((reg_val & 7u) << 3) | (rm_val & 7u);
     /* Istruction register to register mod = 11 */
+     if (sub_op == 3 || subp_op == 7)
+	   *prog++ = (u8)off;
+  
   }else {
     u8 base3 = rm_val & 7u;
     u8 mod;
