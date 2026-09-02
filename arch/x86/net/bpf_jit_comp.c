@@ -1794,6 +1794,24 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     rm_val = src; /* second source */
     v_reg = dst;
     break;
+    /** --------------------- VPMULLD -------------------------- */
+  case(2):
+    x86_op = 0x40;
+    mm = 2; /* 0F 38*/
+    pp = 1; /* prefix 66*/
+    reg_val = dst;
+    rm_val = src;
+    v_reg = dst;
+    break;
+   /* ------------------------ VPSRLD --------------------------- */
+  case(3):
+    x86_op = 0x76;
+    mm = 1; 
+    pp = 1; 
+    reg_val = 2; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPSRLD) */
+    rm_val = src;
+    v_reg = dst; 
+    break;
     /* ---------------------- VPXORD --------------------------- */
   case(4): /* vpxord */
     x86_op = 0xEF;
@@ -1803,8 +1821,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     rm_val = src;
     v_reg = dst;
     break;
-    /* --------------------------- VMOVDQU32 [gpr_src + off] --------------------------  */
-
+  /* --------------- VMOVDQU32 [gpr_src + off] ----------------- */
   case(5): /* Memory -> ZMM */
     x86_op = 0x6F;
     mm = 1;        /* map 0F */
@@ -1823,6 +1840,15 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     rm_val = bpf2x86[dst]; /* register eBPF (mapped in x86) - GPR*/
     v_reg = 0x0F;
     is_mem = true;
+    break;
+  /* ------------------------- VPROLD ------------------------ */
+  case(7):
+    x86_op = 0x76;
+    mm = 1;        /* map 0F38 */
+    pp = 1;        /* prefix 66 */
+    reg_val = 1; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPROLD) */
+    rm_val = src;
+    v_reg = dst;
     break;
   default:
     return prog;
