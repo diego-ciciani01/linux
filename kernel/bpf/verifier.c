@@ -17264,8 +17264,8 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 
         struct bpf_reg_state *reg = &cur_frame->regs[ptr_reg];
 
-        if (reg->type != PTR_TO_PACKET){
-            verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET)\n");
+        if (reg->type != PTR_TO_PACKET && reg->type != PTR_TO_STACK){
+            verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET) or stack (PTR_TO_STACK)\n");
             return -EACCES;
         }
 

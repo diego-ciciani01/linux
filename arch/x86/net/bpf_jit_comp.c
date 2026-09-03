@@ -1774,15 +1774,19 @@ static u8 *emit_fpu_end(u8 *prog)
 /* emit simd istruction for EVEX,
    this bytecode is used to extend the byte of x86 to the vector operations (AVX-512)
  */
-static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
+static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog)
 {
   u8 evex_p0, evex_p1, evex_p2;
   u8 x86_op;
   u8 mm, pp;
+  u8 w = 0;
   u8 reg_val; /* field '/r' "reg" in ModRM */
   u8 rm_val; /*  field '/r' side "rm" in ModRM  */
   u8 v_reg;  /* vvvv register */
   bool is_mem = false;
+  bool has_imm8 = false;
+  bool imm8 = 0;
+
 
   switch(sub_op){
   /* ---------------------- VPADD ------------------------- */
@@ -1794,24 +1798,31 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     rm_val = src; /* second source */
     v_reg = dst;
     break;
-    /** --------------------- VPMULLD -------------------------- */
+    /** --------------------- VPMULLDQ -------------------------- */
   case(2):
     x86_op = 0x40;
     mm = 2; /* 0F 38*/
     pp = 1; /* prefix 66*/
+    w  = 1;
     reg_val = dst;
     rm_val = src;
     v_reg = dst;
     break;
-   /* ------------------------ VPSRLD --------------------------- */
+   /* ------------------------ VPSHUFD --------------------------- */
   case(3):
-    x86_op = 0x72;
+    x86_op = 0x70;
     mm = 1; 
     pp = 1; 
-    reg_val = 2; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPSRLD) */
+    w  = 0;
+
+    reg_val = dst;    
     rm_val = src;
-    v_reg = dst; 
-    break;
+
+    v_reg = 0x0F;
+	
+    has_imm8 = true;
+    imm8 = (u8)off;
+    break;:
     /* ---------------------- VPXORD --------------------------- */
   case(4): /* vpxord */
     x86_op = 0xEF;
@@ -1841,14 +1852,28 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
     v_reg = 0x0F;
     is_mem = true;
     break;
-  /* ------------------------- VPROLD ------------------------ */
+  /* ------------------------- VPROLQ ------------------------ */
   case(7):
     x86_op = 0x72;
     mm = 1;        /* map 0F38 */
     pp = 1;        /* prefix 66 */
+    w  = 1;
     reg_val = 1; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPROLD) */
     rm_val = src;
     v_reg = dst;
+    has_imm8 = true;
+    imm8 = (u8)off;
+    break;
+   case(8):
+    x86_op = 0xB4;
+    mm = 2;
+    pp = 1;
+    w = 1;
+
+    reg_val = dst;
+    v_reg = src;
+
+    rm_val = (u8)off;
     break;
   default:
     return prog;
@@ -1863,8 +1888,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
 
   /* build the EVEX P1: [ W v v v v 1 p p ]  */
   u8 vvvv = (v_reg == 0x0F) ? 0x0Fu : (~v_reg & 0x0Fu);
-  evex_p1 = (vvvv << 3) | 0x04u | (pp & 0x3u);
-
+  evex_p1 =  ((w & 1u) << 7) |  (vvvv << 3) |  0x04u | (pp & 0x3u);
   /* ------------ EVEX P2 fixed value ----------- */
   evex_p2 = 0x48;
 
@@ -1879,10 +1903,9 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, u8 off, u8 *prog)
 
   if (!is_mem){
     *prog++ = 0xc0u | ((reg_val & 7u) << 3) | (rm_val & 7u);
-    /* Istruction register to register mod = 11 */
-     if (sub_op == 3 || subp_op == 7)
-	   *prog++ = (u8)off;
   
+    if (has_imm8)
+    	*prog++ = imm8;
   }else {
     u8 base3 = rm_val & 7u;
     u8 mod;
