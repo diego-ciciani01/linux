@@ -1822,7 +1822,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 	
     has_imm8 = true;
     imm8 = (u8)off;
-    break;:
+    break;
     /* ---------------------- VPXORD --------------------------- */
   case(4): /* vpxord */
     x86_op = 0xEF;
@@ -1864,6 +1864,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
     has_imm8 = true;
     imm8 = (u8)off;
     break;
+   /* -------------------------- VPMADD52LUQ ------------------------ */
    case(8):
     x86_op = 0xB4;
     mm = 2;
