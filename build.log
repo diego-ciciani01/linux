@@ -1,17 +1,11 @@
   SYNC    include/config/auto.conf.cmd
-  DESCEND bpf/resolve_btfids
   DESCEND objtool
+  DESCEND bpf/resolve_btfids
   INSTALL libsubcmd_headers
   INSTALL libbpf_headers
-  CC      arch/x86/net/bpf_jit_comp.o
-arch/x86/net/bpf_jit_comp.c:1765:12: warning: ‘emit_fpu_end’ defined but not used [-Wunused-function]
- 1765 | static u8 *emit_fpu_end(u8 *prog)
-      |            ^~~~~~~~~~~~
-arch/x86/net/bpf_jit_comp.c:1755:13: warning: ‘emit_fpu_begin’ defined but not used [-Wunused-function]
- 1755 | static u8 * emit_fpu_begin(u8 *prog)
-      |             ^~~~~~~~~~~~~~
-  AR      arch/x86/net/built-in.a
-  AR      arch/x86/built-in.a
+  CC      kernel/bpf/verifier.o
+  AR      kernel/bpf/built-in.a
+  AR      kernel/built-in.a
   AR      built-in.a
   AR      built-in-fixup.a
   COPY    vmlinux.a
@@ -48,166 +42,166 @@ arch/x86/net/bpf_jit_comp.c:1755:13: warning: ‘emit_fpu_begin’ defined but n
   LD [M]  arch/x86/crypto/aesni-intel.ko
   LD [M]  arch/x86/kvm/kvm.ko
   LD [M]  arch/x86/kvm/kvm-intel.ko
-  BTF [M] arch/x86/events/intel/intel-cstate.ko
   LD [M]  arch/x86/kvm/kvm-amd.ko
-  BTF [M] arch/x86/events/rapl.ko
   LD [M]  kernel/configs.ko
   LD [M]  fs/nfs_common/nfs_acl.ko
+  BTF [M] arch/x86/events/intel/intel-cstate.ko
   LD [M]  fs/nfs_common/grace.ko
-  BTF [M] arch/x86/crypto/aesni-intel.ko
   LD [M]  fs/nls/nls_iso8859-1.ko
+  BTF [M] arch/x86/events/rapl.ko
+  BTF [M] arch/x86/crypto/aesni-intel.ko
   LD [M]  fs/binfmt_misc.ko
-  LD [M]  fs/netfs/netfs.ko
   BTF [M] kernel/configs.ko
+  LD [M]  fs/netfs/netfs.ko
   LD [M]  fs/nfs/nfs.ko
-  BTF [M] fs/nfs_common/nfs_acl.ko
   LD [M]  fs/nfs/nfsv3.ko
-  BTF [M] fs/nfs_common/grace.ko
   LD [M]  fs/lockd/lockd.ko
   LD [M]  fs/autofs/autofs4.ko
+  BTF [M] fs/nfs_common/nfs_acl.ko
+  BTF [M] fs/nfs_common/grace.ko
   LD [M]  crypto/async_tx/async_tx.ko
   BTF [M] fs/nls/nls_iso8859-1.ko
   LD [M]  crypto/async_tx/async_memcpy.ko
   LD [M]  crypto/async_tx/async_xor.ko
-  BTF [M] fs/binfmt_misc.ko
   LD [M]  crypto/async_tx/async_pq.ko
+  BTF [M] fs/binfmt_misc.ko
   LD [M]  crypto/async_tx/async_raid6_recov.ko
   LD [M]  lib/crypto/gf128mul.ko
-  LD [M]  lib/raid/xor/xor.ko
   BTF [M] crypto/async_tx/async_tx.ko
-  BTF [M] crypto/async_tx/async_memcpy.ko
+  LD [M]  lib/raid/xor/xor.ko
   LD [M]  lib/raid/raid6/raid6_pq.ko
+  BTF [M] crypto/async_tx/async_memcpy.ko
   LD [M]  drivers/char/ipmi/ipmi_msghandler.ko
-  BTF [M] crypto/async_tx/async_xor.ko
   LD [M]  drivers/char/ipmi/ipmi_devintf.ko
+  BTF [M] crypto/async_tx/async_xor.ko
   BTF [M] crypto/async_tx/async_pq.ko
-  BTF [M] crypto/async_tx/async_raid6_recov.ko
-  BTF [M] lib/crypto/gf128mul.ko
   LD [M]  drivers/char/ipmi/ipmi_si.ko
+  BTF [M] lib/crypto/gf128mul.ko
   LD [M]  drivers/char/ipmi/ipmi_ssif.ko
+  BTF [M] crypto/async_tx/async_raid6_recov.ko
   LD [M]  drivers/acpi/acpi_ipmi.ko
-  BTF [M] lib/raid/xor/xor.ko
   LD [M]  drivers/acpi/nfit/nfit.ko
   LD [M]  drivers/acpi/acpi_pad.ko
+  BTF [M] lib/raid/xor/xor.ko
   BTF [M] drivers/char/ipmi/ipmi_devintf.ko
   LD [M]  drivers/dma/ioat/ioatdma.ko
-  LD [M]  drivers/gpu/drm/clients/drm_client_lib.ko
   BTF [M] fs/autofs/autofs4.ko
+  LD [M]  drivers/gpu/drm/clients/drm_client_lib.ko
   BTF [M] fs/nfs/nfsv3.ko
   LD [M]  drivers/gpu/drm/drm.ko
-  LD [M]  drivers/gpu/drm/drm_shmem_helper.ko
   BTF [M] arch/x86/kvm/kvm-amd.ko
   BTF [M] lib/raid/raid6/raid6_pq.ko
-  LD [M]  drivers/gpu/drm/drm_kms_helper.ko
+  LD [M]  drivers/gpu/drm/drm_shmem_helper.ko
   BTF [M] drivers/char/ipmi/ipmi_ssif.ko
+  LD [M]  drivers/gpu/drm/drm_kms_helper.ko
   BTF [M] drivers/acpi/acpi_ipmi.ko
   BTF [M] drivers/acpi/acpi_pad.ko
   BTF [M] drivers/char/ipmi/ipmi_msghandler.ko
   BTF [M] drivers/gpu/drm/clients/drm_client_lib.ko
   BTF [M] drivers/acpi/nfit/nfit.ko
-  BTF [M] drivers/gpu/drm/drm_shmem_helper.ko
   BTF [M] drivers/char/ipmi/ipmi_si.ko
-  BTF [M] drivers/dma/ioat/ioatdma.ko
   BTF [M] arch/x86/kvm/kvm-intel.ko
+  BTF [M] drivers/gpu/drm/drm_shmem_helper.ko
+  BTF [M] drivers/dma/ioat/ioatdma.ko
   BTF [M] fs/lockd/lockd.ko
   BTF [M] fs/netfs/netfs.ko
   LD [M]  drivers/gpu/drm/mgag200/mgag200.ko
   BTF [M] drivers/gpu/drm/drm_kms_helper.ko
-  LD [M]  drivers/misc/mei/mei.ko
   BTF [M] fs/nfs/nfs.ko
   BTF [M] drivers/gpu/drm/mgag200/mgag200.ko
-  BTF [M] drivers/misc/mei/mei.ko
+  LD [M]  drivers/misc/mei/mei.ko
   LD [M]  drivers/misc/mei/mei-me.ko
   LD [M]  drivers/mfd/lpc_ich.ko
   LD [M]  drivers/macintosh/mac_hid.ko
+  BTF [M] drivers/misc/mei/mei-me.ko
   LD [M]  drivers/scsi/raid_class.ko
   BTF [M] drivers/mfd/lpc_ich.ko
-  BTF [M] drivers/gpu/drm/drm.ko
   LD [M]  drivers/scsi/scsi_transport_sas.ko
-  BTF [M] arch/x86/kvm/kvm.ko
-  BTF [M] drivers/misc/mei/mei-me.ko
   BTF [M] drivers/macintosh/mac_hid.ko
   LD [M]  drivers/scsi/mpt3sas/mpt3sas.ko
-  BTF [M] drivers/scsi/raid_class.ko
   LD [M]  drivers/ata/ahci.ko
+  BTF [M] drivers/misc/mei/mei.ko
+  BTF [M] drivers/scsi/raid_class.ko
   LD [M]  drivers/ata/libahci.ko
   LD [M]  drivers/ata/acard-ahci.ko
   LD [M]  drivers/ata/ahci_platform.ko
+  BTF [M] drivers/gpu/drm/drm.ko
   BTF [M] drivers/scsi/scsi_transport_sas.ko
   BTF [M] drivers/ata/ahci.ko
-  BTF [M] drivers/ata/libahci.ko
   LD [M]  drivers/ata/libahci_platform.ko
   LD [M]  drivers/net/ethernet/broadcom/bnxt/bnxt_en.ko
   BTF [M] drivers/ata/acard-ahci.ko
   LD [M]  drivers/net/ethernet/intel/libie/libie.ko
   LD [M]  drivers/net/ethernet/intel/libie/libie_adminq.ko
   BTF [M] drivers/ata/ahci_platform.ko
-  BTF [M] drivers/ata/libahci_platform.ko
+  BTF [M] arch/x86/kvm/kvm.ko
+  BTF [M] drivers/ata/libahci.ko
   LD [M]  drivers/net/ethernet/intel/libie/libie_fwlog.ko
-  BTF [M] drivers/net/ethernet/intel/libie/libie.ko
   LD [M]  drivers/net/ethernet/intel/libeth/libeth.ko
-  BTF [M] drivers/net/ethernet/intel/libie/libie_adminq.ko
   LD [M]  drivers/net/ethernet/intel/ixgbe/ixgbe.ko
+  BTF [M] drivers/net/ethernet/intel/libie/libie.ko
+  BTF [M] drivers/net/ethernet/intel/libie/libie_adminq.ko
+  BTF [M] drivers/ata/libahci_platform.ko
   BTF [M] drivers/net/ethernet/intel/libie/libie_fwlog.ko
-  BTF [M] drivers/scsi/mpt3sas/mpt3sas.ko
   LD [M]  drivers/net/ethernet/intel/i40e/i40e.ko
+  BTF [M] drivers/scsi/mpt3sas/mpt3sas.ko
   BTF [M] drivers/net/ethernet/intel/libeth/libeth.ko
   LD [M]  drivers/net/mdio.ko
   LD [M]  drivers/input/input-leds.ko
-  LD [M]  drivers/input/joydev.ko
-  LD [M]  drivers/i2c/algos/i2c-algo-bit.ko
   BTF [M] drivers/net/mdio.ko
   BTF [M] drivers/input/input-leds.ko
-  LD [M]  drivers/hwmon/acpi_power_meter.ko
-  BTF [M] drivers/i2c/algos/i2c-algo-bit.ko
-  BTF [M] drivers/hwmon/acpi_power_meter.ko
-  LD [M]  drivers/hwmon/coretemp.ko
+  LD [M]  drivers/input/joydev.ko
+  LD [M]  drivers/i2c/algos/i2c-algo-bit.ko
   BTF [M] drivers/input/joydev.ko
+  LD [M]  drivers/hwmon/acpi_power_meter.ko
+  LD [M]  drivers/hwmon/coretemp.ko
   LD [M]  drivers/thermal/intel/intel_powerclamp.ko
   LD [M]  drivers/thermal/intel/x86_pkg_temp_thermal.ko
-  BTF [M] drivers/thermal/intel/intel_powerclamp.ko
+  BTF [M] drivers/i2c/algos/i2c-algo-bit.ko
+  LD [M]  drivers/thermal/intel/intel_pch_thermal.ko
+  BTF [M] drivers/hwmon/acpi_power_meter.ko
   BTF [M] drivers/hwmon/coretemp.ko
   BTF [M] drivers/thermal/intel/x86_pkg_temp_thermal.ko
-  LD [M]  drivers/thermal/intel/intel_pch_thermal.ko
-  BTF [M] drivers/net/ethernet/broadcom/bnxt/bnxt_en.ko
+  BTF [M] drivers/thermal/intel/intel_powerclamp.ko
   BTF [M] drivers/thermal/intel/intel_pch_thermal.ko
   LD [M]  drivers/md/linear.ko
+  BTF [M] drivers/net/ethernet/broadcom/bnxt/bnxt_en.ko
   BTF [M] drivers/md/linear.ko
   BTF [M] drivers/net/ethernet/intel/ixgbe/ixgbe.ko
-  LD [M]  drivers/md/raid0.ko
   BTF [M] drivers/net/ethernet/intel/i40e/i40e.ko
-  BTF [M] drivers/md/raid0.ko
+  LD [M]  drivers/md/raid0.ko
   LD [M]  drivers/md/raid1.ko
   LD [M]  drivers/md/raid10.ko
+  BTF [M] drivers/md/raid0.ko
   LD [M]  drivers/md/raid456.ko
+  BTF [M] drivers/md/raid1.ko
   LD [M]  drivers/edac/skx_edac.ko
   LD [M]  drivers/edac/skx_edac_common.ko
+  BTF [M] drivers/md/raid10.ko
   LD [M]  drivers/edac/i10nm_edac.ko
-  BTF [M] drivers/md/raid1.ko
   LD [M]  drivers/firmware/efi/efi-pstore.ko
   CC      arch/x86/boot/compressed/misc.o
+  BTF [M] drivers/edac/skx_edac.ko
   LD [M]  drivers/hid/hid.ko
   LD [M]  drivers/hid/hid-generic.ko
-  LD [M]  drivers/hid/usbhid/usbhid.ko
-  BTF [M] drivers/edac/skx_edac.ko
   BTF [M] drivers/edac/i10nm_edac.ko
-  BTF [M] drivers/firmware/efi/efi-pstore.ko
+  LD [M]  drivers/hid/usbhid/usbhid.ko
   BTF [M] drivers/edac/skx_edac_common.ko
   LD [M]  drivers/platform/wmi/wmi.ko
-  BTF [M] drivers/hid/hid-generic.ko
+  BTF [M] drivers/firmware/efi/efi-pstore.ko
   LD [M]  drivers/powercap/intel_rapl_common.ko
   LD [M]  drivers/powercap/intel_rapl_msr.ko
-  BTF [M] drivers/md/raid10.ko
-  LD [M]  drivers/dca/dca.ko
-  BTF [M] drivers/hid/usbhid/usbhid.ko
-  BTF [M] drivers/platform/wmi/wmi.ko
-  LD [M]  net/sched/sch_fq_codel.ko
-  BTF [M] drivers/powercap/intel_rapl_msr.ko
-  BTF [M] drivers/powercap/intel_rapl_common.ko
-  LD [M]  net/sunrpc/sunrpc.ko
-  BTF [M] drivers/dca/dca.ko
   BTF [M] drivers/md/raid456.ko
+  BTF [M] drivers/hid/hid-generic.ko
+  LD [M]  drivers/dca/dca.ko
+  LD [M]  net/sched/sch_fq_codel.ko
+  BTF [M] drivers/platform/wmi/wmi.ko
+  BTF [M] drivers/powercap/intel_rapl_common.ko
+  BTF [M] drivers/powercap/intel_rapl_msr.ko
   BTF [M] drivers/hid/hid.ko
+  BTF [M] drivers/hid/usbhid/usbhid.ko
+  BTF [M] drivers/dca/dca.ko
+  LD [M]  net/sunrpc/sunrpc.ko
   BTF [M] net/sched/sch_fq_codel.ko
   BTF [M] net/sunrpc/sunrpc.ko
   ZSTD22  arch/x86/boot/compressed/vmlinux.bin.zst
@@ -220,4 +214,4 @@ arch/x86/net/bpf_jit_comp.c:1755:13: warning: ‘emit_fpu_begin’ defined but n
   LD      arch/x86/boot/setup.elf
   OBJCOPY arch/x86/boot/setup.bin
   BUILD   arch/x86/boot/bzImage
-Kernel: arch/x86/boot/bzImage is ready  (#9)
+Kernel: arch/x86/boot/bzImage is ready  (#12)

@@ -1785,7 +1785,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
   u8 v_reg;  /* vvvv register */
   bool is_mem = false;
   bool has_imm8 = false;
-  bool imm8 = 0;
+  u8 imm8 = 0;
 
 
   switch(sub_op){
