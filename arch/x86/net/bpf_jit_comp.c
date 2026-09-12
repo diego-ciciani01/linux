@@ -2251,27 +2251,109 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			else
 				EMIT2_off32(0x81, add_1reg(b3, dst_reg), imm32);
 			break;
-        case BPF_ALU64 | BPF_TIME | BPF_K:
-            EMIT1(0x50);
-            EMIT1(0x52);
+		case BPF_ALU64 | BPF_TIME | BPF_K:
+			/*
+			 * RDTSC and RDPMC both clobber RAX/RDX.
+			 */
+			EMIT1(0x50); /* push rax */
+			EMIT1(0x52); /* push rdx */
 
-            EMIT2(0x0F, 0x31);
-            EMIT4(0x48, 0xC1, 0xE2, 0x20);
-            EMIT3(0x48, 0x09, 0xD0);
+			if (insn->off == BPF_TIME_RDTSC) {
 
-            if (dst_reg == BPF_REG_0) {
-                EMIT1(0x5A);                           /* pop rdx */
-                EMIT4(0x48, 0x83, 0xC4, 0x08);        /* add rsp, 8 */
-            } else if (dst_reg == BPF_REG_3) {
-                EMIT3(0x48, 0x89, 0xC2);              /* mov rdx, rax */
-                EMIT4(0x48, 0x83, 0xC4, 0x08);        /* add rsp, 8 */
-                EMIT1(0x58);                           /* pop rax */
-            } else {
-                emit_mov_reg(&prog, true, dst_reg, BPF_REG_0); /* dst = rax */
-                EMIT1(0x5A);                           /* pop rdx */
-                EMIT1(0x58);                           /* pop rax */
-            }
-            break;
+				/*
+				 * RDTSC
+				 * output: EDX:EAX
+				 */
+				EMIT2(0x0F, 0x31);
+
+			} else if (insn->off == BPF_TIME_RDPMC) {
+
+				/*
+				 * RDPMC uses ECX as counter selector.
+				 *
+				 * RCX normally contains BPF_REG_4, so preserve it.
+				 */
+				EMIT1(0x51); /* push rcx */
+
+				/*
+				 * ECX = insn->imm
+				 *
+				 * B9 id
+				 */
+				EMIT1(0xB9);
+				EMIT(insn->imm, 4);
+
+				/*
+				 * LFENCE
+				 *
+				 * 0F AE E8
+				 */
+				EMIT3(0x0F, 0xAE, 0xE8);
+
+				/*
+				 * RDPMC
+				 *
+				 * 0F 33
+				 */
+				EMIT2(0x0F, 0x33);
+
+				/*
+				 * LFENCE
+				 */
+				EMIT3(0x0F, 0xAE, 0xE8);
+
+				/*
+				 * Restore RCX / BPF_REG_4.
+				 */
+				EMIT1(0x59); /* pop rcx */
+
+			}
+
+			/*
+			 * Both instructions return:
+			 *
+			 *     EDX:EAX
+			 *
+			 * Construct:
+			 *
+			 *     RAX = ((u64)EDX << 32) | EAX
+			 */
+			EMIT4(0x48, 0xC1, 0xE2, 0x20); /* shl rdx, 32 */
+			EMIT3(0x48, 0x09, 0xD0);       /* or  rax, rdx */
+
+			if (dst_reg == BPF_REG_0) {
+				/*
+				 * Result must remain in RAX.
+				 *
+				 * Restore only RDX and discard saved RAX.
+				 */
+				EMIT1(0x5A);                    /* pop rdx */
+				EMIT4(0x48, 0x83, 0xC4, 0x08); /* add rsp, 8 */
+
+			} else if (dst_reg == BPF_REG_3) {
+				/*
+				 * BPF_REG_3 maps to RDX.
+				 *
+				 * Move result from RAX to RDX, discard saved RDX,
+				 * restore original RAX.
+				 */
+				EMIT3(0x48, 0x89, 0xC2);        /* mov rdx, rax */
+				EMIT4(0x48, 0x83, 0xC4, 0x08); /* add rsp, 8 */
+				EMIT1(0x58);                    /* pop rax */
+
+			} else {
+				/*
+				 * Move result from RAX into normal BPF dst,
+				 * then restore RDX and RAX.
+				 */
+				emit_mov_reg(&prog, true, dst_reg, BPF_REG_0);
+
+				EMIT1(0x5A); /* pop rdx */
+				EMIT1(0x58); /* pop rax */
+			}
+
+			break;
+	
 
 		case BPF_ALU64 | BPF_MOV | BPF_K:
 		case BPF_ALU | BPF_MOV | BPF_K:

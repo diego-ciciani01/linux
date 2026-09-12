@@ -58,6 +58,9 @@
 
 /* custom implementation timestemp */
 #define BPF_TIME 0xf0
+#define BPF_TIME_RDTSC 0
+#define BPF_TIME_RDPMC 1
+
 
 enum bpf_cond_pseudo_jmp {
 	BPF_MAY_GOTO = 0,

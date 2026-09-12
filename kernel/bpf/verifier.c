@@ -12899,6 +12899,13 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	struct btf *desc_btf;
 	int id;
 
+
+	pr_info("DAISY KFUNC ENTER: R6 type=%u base=%u value=%llu mask=%llu\n",
+		regs[BPF_REG_6].type,
+		base_type(regs[BPF_REG_6].type),
+		regs[BPF_REG_6].var_off.value,
+		regs[BPF_REG_6].var_off.mask);
+	
 	/* skip for now, but return error when we find this in fixup_kfunc_call */
 	if (!insn->imm)
 		return 0;
@@ -13089,12 +13096,25 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 		}
 	}
 
+
+	pr_info("DAISY KFUNC PRE-CLEAR: R6 type=%u value=%llu mask=%llu\n",
+        regs[BPF_REG_6].type,
+        regs[BPF_REG_6].var_off.value,
+        regs[BPF_REG_6].var_off.mask);
+	
 	for (i = 0; i < CALLER_SAVED_REGS; i++) {
 		u32 regno = caller_saved[i];
 
 		bpf_mark_reg_not_init(env, &regs[regno]);
 		regs[regno].subreg_def = DEF_NOT_SUBREG;
 	}
+
+
+	pr_info("DAISY KFUNC POST-CLEAR: R6 type=%u value=%llu mask=%llu\n",
+        regs[BPF_REG_6].type,
+        regs[BPF_REG_6].var_off.value,
+        regs[BPF_REG_6].var_off.mask);
+	
 	invalidate_outgoing_stack_args(env, cur_func(env));
 
 	/* Check return type */
@@ -13262,6 +13282,15 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 
 	if (bpf_is_throw_kfunc(insn))
 		return process_bpf_exit_full(env, NULL, true);
+
+
+
+	pr_info("DAISY KFUNC EXIT: R6 type=%u value=%llu mask=%llu\n",
+        regs[BPF_REG_6].type,
+        regs[BPF_REG_6].var_off.value,
+        regs[BPF_REG_6].var_off.mask);
+	
+	
 
 	return 0;
 }
@@ -17242,40 +17271,107 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
   int err;
   struct bpf_insn *insn = &env->prog->insnsi[env->insn_idx];
   u8 class = BPF_CLASS(insn->code);
+
+
+   if (env->insn_idx >= 210 && env->insn_idx <= 240) {
+        struct bpf_reg_state *r6 = &cur_regs(env)[BPF_REG_6];
+
+        pr_info("DAISY TRACE idx=%d R6 type=%u base=%u "
+                "var.value=%llu var.mask=%llu\n",
+                env->insn_idx,
+                r6->type,
+                base_type(r6->type),
+                r6->var_off.value,
+                r6->var_off.mask);
+   }
+
+
+  
   pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
   /* accecpt the BPF_SIMD istruction */
   if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
     pr_info("DAISY DEBUG: VPMULLD  <<<\n");
     pr_info("DAISY DEBUG: SIMD custom instruction found \n");
     if (insn->dst_reg > 15 || insn->src_reg > 15 ){
-        verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
+	       verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
         return -EINVAL;
     }
 
-    /* check the sub opcode of the imm field */
-    if (insn->imm < 1 || insn->imm > 9 ){
-      verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
-      return -EINVAL;
+  /*   /\* check the sub opcode of the imm field *\/ */
+  /*   if (insn->imm < 1 || insn->imm > 9 ){ */
+  /*     verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm); */
+  /*      return -EINVAL; */
+  /*   } */
+    	  
+    /* if (insn->imm == 5 || insn->imm == 6){ */
+    /*     struct bpf_func_state *cur_frame = env->cur_state->frame[env->cur_state->curframe]; */
+    /*     u8 ptr_reg = (insn->imm == 5) ? insn->src_reg : insn->dst_reg; */
+
+    /*     struct bpf_reg_state *reg = &cur_frame->regs[ptr_reg]; */
+
+    /*     if (reg->type != PTR_TO_PACKET && reg->type != PTR_TO_STACK){ */
+    /*         verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET) or stack (PTR_TO_STACK)\n"); */
+    /*         return -EACCES; */
+    /*     } */
+
+    /*     /\* check the range *\/ */
+    /*     if (reg_umax(reg) + insn->off + 64 > reg->range) { */
+    /*         verbose(env, "AVX-512 Error: Out of range access for packet (OOB)\n"); */
+    /*         return -EACCES; */
+    /*     } */
+
+    /* } */
+
+if (insn->imm == 5 || insn->imm == 6) {
+    u8 ptr_reg =
+        (insn->imm == 5) ? insn->src_reg : insn->dst_reg;
+
+    struct bpf_reg_state *reg;
+    enum bpf_reg_type type;
+
+    err = check_reg_arg(env, ptr_reg, SRC_OP);
+    if (err)
+        return err;
+
+    reg = &cur_regs(env)[ptr_reg];
+    type = base_type(reg->type);
+
+    verbose(env,
+            "DAISY SIMD MEM: imm=%d ptr_reg=R%d "
+            "raw_type=%u base_type=%u "
+            "var_off.value=%llu var_off.mask=%llu "
+            "insn_off=%d\n",
+            insn->imm,
+            ptr_reg,
+            reg->type,
+            type,
+            reg->var_off.value,
+            reg->var_off.mask,
+            insn->off);
+
+    if (type != PTR_TO_PACKET &&
+        type != PTR_TO_STACK) {
+        verbose(env,
+                "AVX-512 Error: R%d is not packet/stack pointer\n",
+                ptr_reg);
+        return -EACCES;
     }
 
-    if (insn->imm == 5 || insn->imm == 6){
-        struct bpf_func_state *cur_frame = env->cur_state->frame[env->cur_state->curframe];
-        u8 ptr_reg = (insn->imm == 5) ? insn->src_reg : insn->dst_reg;
-
-        struct bpf_reg_state *reg = &cur_frame->regs[ptr_reg];
-
-        if (reg->type != PTR_TO_PACKET && reg->type != PTR_TO_STACK){
-            verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET) or stack (PTR_TO_STACK)\n");
-            return -EACCES;
-        }
-
-        /* check the range */
+    if (type == PTR_TO_PACKET) {
         if (reg_umax(reg) + insn->off + 64 > reg->range) {
-            verbose(env, "AVX-512 Error: Out of range access for packet (OOB)\n");
+            verbose(env,
+                    "AVX-512 Error: packet access OOB\n");
             return -EACCES;
         }
-
     }
+
+    /*
+     * PTR_TO_STACK:
+     * il range check corretto dei 64 byte lo aggiungiamo dopo.
+     */
+}
+
+    
     return 0;
   }
 
@@ -18022,13 +18118,43 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 		}
 
 		return 0;
-    case BPF_TIME:
-       	if (BPF_SRC(insn->code) != BPF_K || class != BPF_ALU64 ||
-		    insn->src_reg != BPF_REG_0 || insn->off != 0 || insn->imm != 0) {
+	case BPF_TIME:
+	        if (BPF_SRC(insn->code) != BPF_K ||
+		    class != BPF_ALU64 ||
+		    insn->src_reg != BPF_REG_0) {
 			verbose(env, "BPF_TIME uses reserved fields\n");
 			return -EINVAL;
 		}
-        return 0;
+
+		switch (insn->off) {
+
+		case BPF_TIME_RDTSC:
+			/*
+			 * RDTSC has no selector.
+			 */
+			if (insn->imm != 0) {
+				verbose(env, "BPF_TIME_RDTSC requires imm == 0\n");
+				return -EINVAL;
+			}
+			break;
+
+		case BPF_TIME_RDPMC:
+			if (insn->imm < 0 || insn->imm >= 6) {
+				verbose(env,
+					"BPF_TIME_RDPMC invalid counter %d\n",
+					insn->imm);
+				return -EINVAL;
+			}
+			break;
+
+		default:
+			verbose(env,
+				"BPF_TIME invalid sub-op %d\n",
+				insn->off);
+			return -EINVAL;
+		}
+
+		return 0;
 	default:
 		verbose(env, "invalid BPF_ALU opcode %x\n", opcode);
 		return -EINVAL;

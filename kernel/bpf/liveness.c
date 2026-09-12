@@ -2074,6 +2074,36 @@ static void compute_insn_live_regs(struct bpf_verifier_env *env,
 	u16 def = 0;
 	u16 use = 0xffff;
 
+	if (BPF_CLASS(insn->code) == BPF_ALU64 &&
+	    BPF_OP(insn->code) == 0xe0) {
+
+	    switch (insn->imm) {
+
+	    case 5: /* SIMD LOAD: zmm_dst <- [BPF src_reg + off] */
+		use = BIT(insn->src_reg);
+		def = 0;
+		break;
+
+	    case 6: /* SIMD STORE: [BPF dst_reg + off] <- zmm_src */
+		use = BIT(insn->dst_reg);
+		def = 0;
+		break;
+
+	    /*
+	     * Tutte le altre SIMD lavorano solo sui registri ZMM.
+	     * dst_reg/src_reg NON sono GPR BPF in questi casi.
+	     */
+	    default:
+		use = 0;
+		def = 0;
+		break;
+	    }
+
+	    info->use = use;
+	    info->def = def;
+	    return;
+	}
+
 	switch (class) {
 	case BPF_LD:
 		switch (mode) {
