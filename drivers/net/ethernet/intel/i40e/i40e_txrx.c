@@ -2846,12 +2846,9 @@ int i40e_napi_poll(struct napi_struct *napi, int budget)
          * After this point the function is free to take any
          * return path without leaking the kernel FPU state.
          */
-        if (fpu_active){
+                if (fpu_active) {
                 kernel_fpu_end();
-	
-        pr_info_ratelimited(
-                "DAISY_I40E: kernel_fpu_end RX\n");
-	}
+        }
         if (!i40e_enabled_xdp_vsi(vsi))
                 trace_i40e_napi_poll(napi, q_vector,
                                      budget, budget_per_ring,
