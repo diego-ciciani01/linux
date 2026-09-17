@@ -1773,112 +1773,136 @@ static u8 *emit_fpu_end(u8 *prog)
 
 /* emit simd istruction for EVEX,
    this bytecode is used to extend the byte of x86 to the vector operations (AVX-512)
- */
+*/
 static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog)
 {
-  u8 evex_p0, evex_p1, evex_p2;
-  u8 x86_op;
-  u8 mm, pp;
-  u8 w = 0;
-  u8 reg_val; /* field '/r' "reg" in ModRM */
-  u8 rm_val; /*  field '/r' side "rm" in ModRM  */
-  u8 v_reg;  /* vvvv register */
-  bool is_mem = false;
-  bool has_imm8 = false;
-  u8 imm8 = 0;
+	u8 evex_p0, evex_p1, evex_p2;
+	u8 x86_op;
+	u8 mm, pp;
+	u8 w = 0;
+	u8 reg_val; /* field '/r' "reg" in ModRM */
+	u8 rm_val; /*  field '/r' side "rm" in ModRM  */
+	u8 v_reg;  /* vvvv register */
+	bool is_mem = false;
+	bool has_imm8 = false;
+	u8 imm8 = 0;
 
 
-  switch(sub_op){
-  /* ---------------------- VPADD ------------------------- */
-  case(1):
-    x86_op = 0xFE;
-    mm = 1; /* map 0F */
-    pp = 1; /* prefix 66 */
-    reg_val = dst; /* ZMM destination */
-    rm_val = src; /* second source */
-    v_reg = dst;
-    break;
-    /** --------------------- VPMULLDQ -------------------------- */
-  case(2):
-    x86_op = 0x40;
-    mm = 2; /* 0F 38*/
-    pp = 1; /* prefix 66*/
-    w  = 1;
-    reg_val = dst;
-    rm_val = src;
-    v_reg = dst;
-    break;
-   /* ------------------------ VPSHUFD --------------------------- */
-  case(3):
-    x86_op = 0x70;
-    mm = 1; 
-    pp = 1; 
-    w  = 0;
+	switch(sub_op){
+		/* ---------------------- VPADD ------------------------- */
+	case(1):
+		x86_op = 0xFE;
+		mm = 1; /* map 0F */
+		pp = 1; /* prefix 66 */
+		reg_val = dst; /* ZMM destination */
+		rm_val = src; /* second source */
+		v_reg = dst;
+		break;
+		/* --------------------- VPMULLDQ -------------------------- */
+	case(2):
+		x86_op = 0x40;
+		mm = 2; /* 0F 38*/
+		pp = 1; /* prefix 66*/
+		w  = 1;
+		reg_val = dst;
+		rm_val = src;
+		v_reg = dst;
+		break;
+		/* ------------------------ VPSHUFD --------------------------- */
+	case(3):
+		x86_op = 0x70;
+		mm = 1; 
+		pp = 1; 
+		w  = 0;
 
-    reg_val = dst;    
-    rm_val = src;
+		reg_val = dst;    
+		rm_val = src;
 
-    v_reg = 0x0F;
+		v_reg = 0x0F;
 	
-    has_imm8 = true;
-    imm8 = (u8)off;
-    break;
-    /* ---------------------- VPXORD --------------------------- */
-  case(4): /* vpxord */
-    x86_op = 0xEF;
-    mm = 1;        /* map 0F38 */
-    pp = 1;        /* prefix 66 */
-    reg_val = dst;
-    rm_val = src;
-    v_reg = dst;
-    break;
-  /* --------------- VMOVDQU32 [gpr_src + off] ----------------- */
-  case(5): /* Memory -> ZMM */
-    x86_op = 0x6F;
-    mm = 1;        /* map 0F */
-    pp = 2;        /* prefix F3 */
-    reg_val = dst;          /* ZMM destination */
-    rm_val = bpf2x86[src];  /* register eBPF (mapped in x86) - GPR*/
-    v_reg = 0x0F;           /* not used on mov */
-    is_mem = true;
-    break;
+		has_imm8 = true;
+		imm8 = (u8)off;
+		break;
+		/* ---------------------- VPXORD --------------------------- */
+	case(4): /* vpxord */
+		x86_op = 0xEF;
+		mm = 1;        /* map 0F38 */
+		pp = 1;        /* prefix 66 */
+		reg_val = dst;
+		rm_val = src;
+		v_reg = dst;
+		break;
+		/* --------------- VMOVDQU32 [gpr_src + off] ----------------- */
+	case(5): /* Memory -> ZMM */
+		x86_op = 0x6F;
+		mm = 1;        /* map 0F */
+		pp = 2;        /* prefix F3 */
+		reg_val = dst;          /* ZMM destination */
+		rm_val = bpf2x86[src];  /* register eBPF (mapped in x86) - GPR*/
+		v_reg = 0x0F;           /* not used on mov */
+		is_mem = true;
+		break;
 
-  case(6): /* ZMM -> Memory */
-    x86_op = 0x7F;
-    mm = 1;        /* map 0F */
-    pp = 2;        /* prefix F3 */
-    reg_val = src;          /* ZMM source to save */
-    rm_val = bpf2x86[dst]; /* register eBPF (mapped in x86) - GPR*/
-    v_reg = 0x0F;
-    is_mem = true;
-    break;
-  /* ------------------------- VPROLQ ------------------------ */
-  case(7):
-    x86_op = 0x72;
-    mm = 1;        /* map 0F38 */
-    pp = 1;        /* prefix 66 */
-    w  = 1;
-    reg_val = 1; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPROLD) */
-    rm_val = src;
-    v_reg = dst;
-    has_imm8 = true;
-    imm8 = (u8)off;
-    break;
-   /* -------------------------- VPMADD52LUQ ------------------------ */
-   case(8):
-    x86_op = 0xB4;
-    mm = 2;
-    pp = 1;
-    w = 1;
+	case(6): /* ZMM -> Memory */
+		x86_op = 0x7F;
+		mm = 1;        /* map 0F */
+		pp = 2;        /* prefix F3 */
+		reg_val = src;          /* ZMM source to save */
+		rm_val = bpf2x86[dst]; /* register eBPF (mapped in x86) - GPR*/
+		v_reg = 0x0F;
+		is_mem = true;
+		break;
+		/* ------------------------- VPROLQ ------------------------ */
+	case(7):
+		x86_op = 0x72;
+		mm = 1;        /* map 0F38 */
+		pp = 1;        /* prefix 66 */
+		w  = 1;
+		reg_val = 1; /* "reg_val" does not contains "dst",  "2" is the second part of opcode (VPROLD) */
+		rm_val = src;
+		v_reg = dst;
+		has_imm8 = true;
+		imm8 = (u8)off;
+		break;
+		/* -------------------------- VPMADD52LUQ ------------------------ */
+	case(8):
+		x86_op = 0xB4;
+		mm = 2;
+		pp = 1;
+		w = 1;
 
-    reg_val = dst;
-    v_reg = src;
+		reg_val = dst;
+		v_reg = src;
 
-    rm_val = (u8)off;
-    break;
-  default:
-    return prog;
-  }
+		rm_val = (u8)off;
+		break;
+		/* --------------------------- VPADDQ ------------------------------- */
+	case(9):
+		x86_op = 0xD4;
+		mm = 1; /* OF */
+		pp = 1; /* 66 */
+		w = 1;
+
+		reg_val = dst;
+		rm_val = src;
+		v_reg = dst;
+		break;
+		/* ----------------------------- VPBROADCASTD ------------------------ */
+	case(10):
+		x86_op = 0x7C;
+		mm = 2;              /* 0F 38 */
+		pp = 1;              /* 66 */
+		w = 0;               /* D = 32 bit */
+
+		reg_val = dst;       /* ZMM destination */
+		rm_val = bpf2x86[src]; 
+
+		v_reg = 0x0F;       
+
+		break;
+	default:
+		return prog;
+	}
 
   /* build EVEX */
 

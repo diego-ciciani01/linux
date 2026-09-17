@@ -1101,11 +1101,14 @@ static void arg_track_xfer(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	int depth = instance->depth;
 	u8 class = BPF_CLASS(insn->code);
 	u8 code = BPF_OP(insn->code);
+	if (class == BPF_ALU64 && code == 0xe0)
+		return;
+	
 	struct arg_track *dst = &at_out[insn->dst_reg];
 	struct arg_track *src = &at_out[insn->src_reg];
 	struct arg_track none = { .frame = ARG_NONE };
 	int r, slot;
-
+	
 	/* Handle stack arg stores and loads. */
 	if (is_stack_arg_st(insn) || is_stack_arg_stx(insn)) {
 		slot = stack_arg_off_to_slot(insn->off);
@@ -1352,6 +1355,30 @@ static int record_load_store_access(struct bpf_verifier_env *env,
 	if (is_stack_arg_stx(insn) || is_stack_arg_st(insn) || is_stack_arg_ldx(insn))
 		return 0;
 
+
+	/* ---------- DAISY SIMD ---------- */
+
+	if (class == BPF_ALU64 &&
+	    BPF_OP(insn->code) == 0xe0) {
+
+		if (insn->imm == 5) {
+			/* SIMD LOAD: read 64 bytes */
+			ptr = &at[insn->src_reg];
+			sz = 64;
+			goto resolve_ptr;
+		}
+
+		if (insn->imm == 6) {
+			/* SIMD STORE: write 64 bytes */
+			ptr = &at[insn->dst_reg];
+			sz = -64;
+			goto resolve_ptr;
+		}
+
+		return 0;
+	}
+
+	
 	switch (class) {
 	case BPF_LDX:
 		ptr = &at[insn->src_reg];
@@ -1376,6 +1403,8 @@ static int record_load_store_access(struct bpf_verifier_env *env,
 	default:
 		return 0;
 	}
+
+	resolve_ptr:
 
 	/* Resolve offsets: fold insn->off into arg_track */
 	if (ptr->off_cnt > 0) {

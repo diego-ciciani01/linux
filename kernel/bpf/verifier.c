@@ -17288,89 +17288,182 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 
   
   pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
+
   /* accecpt the BPF_SIMD istruction */
   if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
-    pr_info("DAISY DEBUG: VPMULLD  <<<\n");
-    pr_info("DAISY DEBUG: SIMD custom instruction found \n");
     if (insn->dst_reg > 15 || insn->src_reg > 15 ){
 	       verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
         return -EINVAL;
     }
 
-  /*   /\* check the sub opcode of the imm field *\/ */
-  /*   if (insn->imm < 1 || insn->imm > 9 ){ */
-  /*     verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm); */
-  /*      return -EINVAL; */
-  /*   } */
-    	  
-    /* if (insn->imm == 5 || insn->imm == 6){ */
-    /*     struct bpf_func_state *cur_frame = env->cur_state->frame[env->cur_state->curframe]; */
-    /*     u8 ptr_reg = (insn->imm == 5) ? insn->src_reg : insn->dst_reg; */
+    if (insn->imm == 5 || insn->imm == 6) {
+	    const int simd_size = 64;
 
-    /*     struct bpf_reg_state *reg = &cur_frame->regs[ptr_reg]; */
+	    /*
+	     * LOAD:
+	     *   dst = ZMM
+	     *   src = BPF pointer register
+	     *
+	     * STORE:
+	     *   dst = BPF pointer register
+	     *   src = ZMM
+	     */
+	    u8 ptr_reg =
+		    (insn->imm == 5) ? insn->src_reg : insn->dst_reg;
 
-    /*     if (reg->type != PTR_TO_PACKET && reg->type != PTR_TO_STACK){ */
-    /*         verbose(env, "AVX-512 Error: src_reg is not a packet (PTR_TO_PACKET) or stack (PTR_TO_STACK)\n"); */
-    /*         return -EACCES; */
-    /*     } */
+	    enum bpf_access_type access_type =
+		    (insn->imm == 5) ? BPF_READ : BPF_WRITE;
 
-    /*     /\* check the range *\/ */
-    /*     if (reg_umax(reg) + insn->off + 64 > reg->range) { */
-    /*         verbose(env, "AVX-512 Error: Out of range access for packet (OOB)\n"); */
-    /*         return -EACCES; */
-    /*     } */
+	    struct bpf_reg_state *reg;
+	    enum bpf_reg_type type;
+	    argno_t argno;
+	    int off = insn->off;
 
-    /* } */
+	    /*
+	     * ptr_reg is always READ by the instruction:
+	     * we're dereferencing the address contained in it.
+	     */
+	    err = check_reg_arg(env, ptr_reg, SRC_OP);
+	    if (err)
+		    return err;
 
-if (insn->imm == 5 || insn->imm == 6) {
-    u8 ptr_reg =
-        (insn->imm == 5) ? insn->src_reg : insn->dst_reg;
+	    reg = &cur_regs(env)[ptr_reg];
+	    type = base_type(reg->type);
+	    argno = argno_from_reg(ptr_reg);
 
-    struct bpf_reg_state *reg;
-    enum bpf_reg_type type;
+	    verbose(env,
+		    "DAISY SIMD MEM: imm=%d ptr_reg=R%d "
+		    "raw_type=%u base_type=%u "
+		    "var_off.value=%llu var_off.mask=%llu "
+		    "insn_off=%d access=%s\n",
+		    insn->imm,
+		    ptr_reg,
+		    reg->type,
+		    type,
+		    reg->var_off.value,
+		    reg->var_off.mask,
+		    off,
+		    access_type == BPF_READ ? "READ" : "WRITE");
 
-    err = check_reg_arg(env, ptr_reg, SRC_OP);
-    if (err)
-        return err;
+	    /*
+	     * Do not silently accept nullable pointers.
+	     */
+	    if (type_may_be_null(reg->type)) {
+		    verbose(env,
+			    "AVX-512 Error: nullable pointer R%d cannot be dereferenced\n",
+			    ptr_reg);
+		    return -EACCES;
+	    }
 
-    reg = &cur_regs(env)[ptr_reg];
-    type = base_type(reg->type);
+	    switch (type) {
 
-    verbose(env,
-            "DAISY SIMD MEM: imm=%d ptr_reg=R%d "
-            "raw_type=%u base_type=%u "
-            "var_off.value=%llu var_off.mask=%llu "
-            "insn_off=%d\n",
-            insn->imm,
-            ptr_reg,
-            reg->type,
-            type,
-            reg->var_off.value,
-            reg->var_off.mask,
-            insn->off);
+	    case PTR_TO_STACK:
+		    /*
+		     * First make sure [ptr + off, ptr + off + 64)
+		     * falls inside the BPF stack.
+		     */
+		    err = check_stack_access_within_bounds(
+			    env, reg, argno,
+			    off, simd_size,
+			    access_type);
+		    if (err)
+			    return err;
 
-    if (type != PTR_TO_PACKET &&
-        type != PTR_TO_STACK) {
-        verbose(env,
-                "AVX-512 Error: R%d is not packet/stack pointer\n",
-                ptr_reg);
-        return -EACCES;
+		    if (access_type == BPF_READ) {
+			    /*
+			     * SIMD load:
+			     * all 64 bytes must already be initialized.
+			     *
+			     * -1 means that the result doesn't go into a normal
+			     * BPF scalar register.
+			     */
+			    err = check_stack_read(
+				    env, reg, argno,
+				    off, simd_size,
+				    -1);
+		    } else {
+			    /*
+			     * SIMD store:
+			     * mark those 64 bytes as initialized.
+			     *
+			     * This is CRUCIAL because afterwards CMS reads h[]
+			     * using normal scalar BPF loads.
+			     */
+			    err = check_stack_write(
+				    env, reg,
+				    off, simd_size,
+				    -1,
+				    env->insn_idx);
+		    }
+
+		    if (err)
+			    return err;
+
+		    break;
+
+	    case PTR_TO_MAP_VALUE:
+		    /*
+		     * This is what we need for .rodata.
+		     *
+		     * First check whether this map allows the requested
+		     * operation. A .rodata map permits READ but not WRITE.
+		     */
+		    err = check_map_access_type(
+			    env, reg,
+			    off, simd_size,
+			    access_type);
+		    if (err)
+			    return err;
+
+		    /*
+		     * Check:
+		     *
+		     *   reg->var_off + off + 64 <= map->value_size
+		     *
+		     * plus BTF-sensitive map restrictions.
+		     */
+		    err = check_map_access(
+			    env, reg, argno,
+			    off, simd_size,
+			    false,
+			    ACCESS_DIRECT);
+		    if (err)
+			    return err;
+
+		    break;
+
+	    case PTR_TO_PACKET:
+	    case PTR_TO_PACKET_META:
+		    /*
+		     * For stores, respect the normal rules for whether
+		     * this program type may modify packet data.
+		     */
+		    if (access_type == BPF_WRITE &&
+			!may_access_direct_pkt_data(env, NULL, access_type)) {
+			    verbose(env,
+				    "AVX-512 Error: cannot write SIMD data into packet\n");
+			    return -EACCES;
+		    }
+
+		    err = check_packet_access(
+			    env, reg, argno,
+			    off, simd_size,
+			    false);
+		    if (err)
+			    return err;
+
+		    break;
+
+	    default:
+		    verbose(env,
+			    "AVX-512 Error: unsupported memory pointer "
+			    "R%d type=%u base_type=%u\n",
+			    ptr_reg,
+			    reg->type,
+			    type);
+		    return -EACCES;
+	    }
     }
-
-    if (type == PTR_TO_PACKET) {
-        if (reg_umax(reg) + insn->off + 64 > reg->range) {
-            verbose(env,
-                    "AVX-512 Error: packet access OOB\n");
-            return -EACCES;
-        }
-    }
-
-    /*
-     * PTR_TO_STACK:
-     * il range check corretto dei 64 byte lo aggiungiamo dopo.
-     */
-}
-
     
     return 0;
   }
@@ -18112,7 +18205,7 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 
-		if (insn->imm < 1 || insn->imm > 9) {
+		if (insn->imm < 1 || insn->imm > 10) {
 			verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
 			return -EINVAL;
 		}
