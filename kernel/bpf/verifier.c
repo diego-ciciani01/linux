@@ -199,6 +199,7 @@ struct bpf_verifier_stack_elem {
 #define BPF_GLOBAL_PERCPU_MA_MAX_SIZE  512
 
 #define BPF_PRIV_STACK_MIN_SIZE		64
+#define BPF_SIMD_MAX_REG 16
 
 static int acquire_reference(struct bpf_verifier_env *env, int insn_idx, int parent_id);
 static int release_reference_nomark(struct bpf_verifier_state *state, int id);
@@ -440,6 +441,17 @@ void bpf_mark_subprog_exc_cb(struct bpf_verifier_env *env, int subprog)
 	info->is_cb = true;
 	info->is_async_cb = true;
 	info->is_exception_cb = true;
+}
+
+static bool is_simd_reg_valid(u32 reg)
+{
+    return reg < BPF_SIMD_MAX_REG;
+}
+
+static bool is_daisy_simd_insn(const struct bpf_insn *insn)
+{
+    return BPF_CLASS(insn->code) == BPF_ALU64 &&
+           BPF_OP(insn->code) == 0xe0;
 }
 
 static bool subprog_is_exc_cb(struct bpf_verifier_env *env, int subprog)
@@ -18205,7 +18217,7 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 
-		if (insn->imm < 1 || insn->imm > 10) {
+		if (insn->imm < 1 || insn->imm > 11) {
 			verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
 			return -EINVAL;
 		}
@@ -18383,6 +18395,90 @@ static int check_and_resolve_insns(struct bpf_verifier_env *env)
 		return err;
 
 	for (i = 0; i < insn_cnt; i++, insn++) {
+		/*
+		 * DAISY SIMD instructions use dst_reg/src_reg as a
+		 * separate SIMD register namespace (ZMM0-ZMM15).
+		 *
+		 * SIMD_LOAD / SIMD_STORE are special because one side
+		 * still refers to a normal BPF pointer register.
+		 */
+		if (is_daisy_simd_insn(insn)) {
+
+			switch (insn->imm) {
+
+				/*
+				 * SIMD LOAD:
+				 *
+				 * dst_reg = ZMM register
+				 * src_reg = normal BPF pointer register
+				 */
+			case 5:
+				if (insn->dst_reg >= BPF_SIMD_MAX_REG) {
+					verbose(env,
+						"invalid SIMD destination ZMM%d\n",
+						insn->dst_reg);
+					return -EINVAL;
+				}
+
+				if (insn->src_reg >= MAX_BPF_REG) {
+					verbose(env,
+						"invalid BPF pointer R%d for SIMD load\n",
+						insn->src_reg);
+					return -EINVAL;
+				}
+
+				break;
+
+				/*
+				 * SIMD STORE:
+				 *
+				 * dst_reg = normal BPF pointer register
+				 * src_reg = ZMM register
+				 */
+			case 6:
+				if (insn->dst_reg >= MAX_BPF_REG) {
+					verbose(env,
+						"invalid BPF pointer R%d for SIMD store\n",
+						insn->dst_reg);
+					return -EINVAL;
+				}
+
+				if (insn->src_reg >= BPF_SIMD_MAX_REG) {
+					verbose(env,
+						"invalid SIMD source ZMM%d\n",
+						insn->src_reg);
+					return -EINVAL;
+				}
+
+				break;
+
+				/*
+				 * Pure SIMD instructions:
+				 *
+				 * MOV, MUL, ADD, ROL, SHIFT, ...
+				 */
+			default:
+				if (insn->dst_reg >= BPF_SIMD_MAX_REG ||
+				    insn->src_reg >= BPF_SIMD_MAX_REG) {
+					verbose(env,
+						"invalid SIMD registers dst=ZMM%d src=ZMM%d\n",
+						insn->dst_reg,
+						insn->src_reg);
+					return -EINVAL;
+				}
+
+				break;
+			}
+
+			/*
+			 * IMPORTANT:
+			 *
+			 * Do not run the normal R0-R10 validation below.
+			 */
+			continue;
+		}
+
+		
 		if (insn->dst_reg >= MAX_BPF_REG &&
 		    !is_stack_arg_st(insn) && !is_stack_arg_stx(insn)) {
 			verbose(env, "R%d is invalid\n", insn->dst_reg);
@@ -18496,7 +18592,7 @@ static int check_and_resolve_insns(struct bpf_verifier_env *env)
 			insn[0].imm = (u32)addr;
 			insn[1].imm = addr >> 32;
 
-next_insn:
+		next_insn:
 			insn++;
 			i++;
 			continue;

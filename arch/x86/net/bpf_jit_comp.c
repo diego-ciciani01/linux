@@ -1900,6 +1900,18 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		v_reg = 0x0F;       
 
 		break;
+		/* --------------- VMOVDQU32 zmm_src -> zmm_dst ----------------- */
+	case(11):
+		x86_op = 0x6F;
+		mm = 1;        /* map 0F */
+		pp = 2;        /* prefix F3 */
+
+		reg_val = dst; /* ZMM destination */
+		rm_val  = src; /* ZMM source */
+
+		v_reg = 0x0F;  /* unused for VMOVDQU32 */
+		is_mem = false;
+		break;
 	default:
 		return prog;
 	}
