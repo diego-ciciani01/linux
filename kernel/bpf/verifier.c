@@ -18197,7 +18197,7 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 	case BPF_ARSH:
 	case BPF_MUL:
 	case BPF_DIV:
-    case BPF_MOD:
+	case BPF_MOD:
 		if (BPF_SRC(insn->code) == BPF_X) {
 			if (insn->imm != 0 || (insn->off != 0 && insn->off != 1) ||
 			    (insn->off == 1 && opcode != BPF_MOD && opcode != BPF_DIV)) {
@@ -18211,14 +18211,22 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 		return 0;
-    case 0xe0:
+	case 0xe0:
+		pr_info("DAISY SIMD CHECK V2: imm=%d dst=%u src=%u\n",
+			insn->imm,
+			insn->dst_reg,
+			insn->src_reg);
+
 		if (insn->dst_reg > 15 || insn->src_reg > 15) {
-			verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
+			verbose(env,
+				"DAISY V2: ZMM register out of range\n");
 			return -EINVAL;
 		}
 
-		if (insn->imm < 1 || insn->imm > 11) {
-			verbose(env, "AVX-512 Error: Sub-opcode SIMD %d not valid\n", insn->imm);
+		if (insn->imm < 1 || insn->imm > 12) {
+			verbose(env,
+				"DAISY V2: SIMD sub-op %d invalid, max=12\n",
+				insn->imm);
 			return -EINVAL;
 		}
 

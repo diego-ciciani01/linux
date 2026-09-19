@@ -52,6 +52,7 @@
 #define BPF_CMPXCHG	(0xf0 | BPF_FETCH)	/* atomic compare-and-write */
 
 #define BPF_SIMD 0xe0   /* custom implementation of AVX-512, with half registers (16) */
+#define BPF_SIMD_MUL3 12
 
 #define BPF_LOAD_ACQ	0x100	/* load-acquire */
 #define BPF_STORE_REL	0x110	/* store-release */

@@ -50,21 +50,56 @@ static bool ci_is_map_value(const struct const_arg_info *ci)
 static void const_reg_xfer(struct bpf_verifier_env *env, struct const_arg_info *ci_out,
 			   struct bpf_insn *insn, struct bpf_insn *insns, int idx)
 {
-	struct const_arg_info unknown = { .state = CONST_ARG_UNKNOWN, .val = 0 };
-	struct const_arg_info *dst = &ci_out[insn->dst_reg];
-	struct const_arg_info *src = &ci_out[insn->src_reg];
+
+	struct const_arg_info unknown = {
+		.state = CONST_ARG_UNKNOWN,
+		.val = 0
+	};
+
+	struct const_arg_info *dst;
+	struct const_arg_info *src;
+
 	u8 class = BPF_CLASS(insn->code);
 	u8 mode = BPF_MODE(insn->code);
 	u8 opcode = BPF_OP(insn->code) | BPF_SRC(insn->code);
 	int r;
 
-	/* Stack arg stores (r11-based) are outside the tracked register set. */
+	/*
+	 * DAISY SIMD uses dst_reg/src_reg as a separate ZMM
+	 * namespace (ZMM0-ZMM15), not as scalar BPF registers.
+	 *
+	 * This pass tracks only scalar BPF register constants.
+	 * Current SIMD operations don't modify scalar BPF regs,
+	 * therefore SIMD is an identity transfer here.
+	 *
+	 * MUST happen before indexing ci_out[].
+	 */
+	if (class == BPF_ALU64 &&
+	    BPF_OP(insn->code) == 0xe0) {
+		pr_info("DAISY CONST: skip SIMD sub=%d dst=%u src=%u\n",
+			insn->imm, insn->dst_reg, insn->src_reg);
+		return;
+	}
+
+	/*
+	 * Stack argument operations may use special register
+	 * encodings outside the normal tracked register set.
+	 * Handle them before creating dst/src pointers too.
+	 */
 	if (is_stack_arg_st(insn) || is_stack_arg_stx(insn))
 		return;
+
 	if (is_stack_arg_ldx(insn)) {
 		ci_out[insn->dst_reg] = unknown;
 		return;
 	}
+
+	/*
+	 * From this point onward dst_reg/src_reg refer to
+	 * normal scalar BPF registers.
+	 */
+	dst = &ci_out[insn->dst_reg];
+	src = &ci_out[insn->src_reg];
 
 	switch (class) {
 	case BPF_ALU:

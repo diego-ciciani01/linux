@@ -1912,6 +1912,20 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		v_reg = 0x0F;  /* unused for VMOVDQU32 */
 		is_mem = false;
 		break;
+
+	case(12):
+		
+		x86_op = 0x40;
+		mm     = 2;
+		pp     = 1;
+		w =  1;
+		reg_val = dst;       /* EVEX ModRM.reg : destination */
+		v_reg   = src;       /* EVEX.vvvv      : source1 */
+		rm_val  = off & 0xf; /* ModRM.r/m       : source2 */
+
+		break;
+
+		return 0;
 	default:
 		return prog;
 	}
