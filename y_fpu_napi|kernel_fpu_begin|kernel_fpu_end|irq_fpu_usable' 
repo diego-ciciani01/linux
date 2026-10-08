@@ -1,0 +1,51 @@
+[1mdiff --git a/drivers/net/ethernet/mellanox/mlx5/core/en_txrx.c b/drivers/net/ethernet/mellanox/mlx5/core/en_txrx.c[m
+[1mindex 185105606..827fe9bd2 100644[m
+[1m--- a/drivers/net/ethernet/mellanox/mlx5/core/en_txrx.c[m
+[1m+++ b/drivers/net/ethernet/mellanox/mlx5/core/en_txrx.c[m
+[36m@@ -39,6 +39,13 @@[m
+ #include "en/xsk/tx.h"[m
+ #include "en_accel/ktls_txrx.h"[m
+ [m
+[32m+[m
+[32m+[m[32mstatic bool daisy_fpu_napi = true;[m
+[32m+[m[32mmodule_param(daisy_fpu_napi, bool, 0644);[m
+[32m+[m[32mMODULE_PARM_DESC(daisy_fpu_napi, "Enable DAISY kernel FPU management around mlx5 NAPI RX");[m
+[32m+[m
+[32m+[m
+[32m+[m
+ static inline bool mlx5e_channel_no_affinity_change(struct mlx5e_channel *c)[m
+ {[m
+ 	int current_cpu = smp_processor_id();[m
+[36m@@ -134,6 +141,7 @@[m [mint mlx5e_napi_poll(struct napi_struct *napi, int budget)[m
+ 	bool aff_change = false;[m
+ 	bool busy_xsk = false;[m
+ 	bool busy = false;[m
+[32m+[m	[32mbool fpu_active = false;[m
+ 	int work_done = 0;[m
+ 	u16 qos_sqs_size;[m
+ 	bool xsk_open;[m
+[36m@@ -166,6 +174,15 @@[m [mint mlx5e_napi_poll(struct napi_struct *napi, int budget)[m
+ 	if (unlikely(!budget))[m
+ 		goto out;[m
+ [m
+[32m+[m	[32mif (daisy_fpu_napi) {[m
+[32m+[m	[32mif (likely(irq_fpu_usable())) {[m
+[32m+[m		[32mkernel_fpu_begin();[m
+[32m+[m		[32mfpu_active = true;[m
+[32m+[m	[32m} else {[m
+[32m+[m		[32mpr_warn_once("DAISY_MLX5: FPU not usable in NAPI RX path\n");[m
+[32m+[m	[32m}[m
+[32m+[m[32m}[m
+[32m+[m
+ 	if (c->xdp) {[m
+ 		if (c->xdpsq)[m
+ 			busy |= mlx5e_poll_xdpsq_cq(&c->xdpsq->cq);[m
+[36m@@ -258,6 +275,8 @@[m [mint mlx5e_napi_poll(struct napi_struct *napi, int budget)[m
+ 	}[m
+ [m
+ out:[m
+[32m+[m	[32mif (fpu_active)[m
+[32m+[m		[32mkernel_fpu_end();[m
+ 	rcu_read_unlock();[m
+ [m
+ 	return work_done;[m

@@ -1790,7 +1790,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 
 	switch(sub_op){
 		/* ---------------------- VPADD ------------------------- */
-	case(1):
+fp	case(1):
 		x86_op = 0xFE;
 		mm = 1; /* map 0F */
 		pp = 1; /* prefix 66 */
@@ -1900,7 +1900,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		v_reg = 0x0F;       
 
 		break;
-		/* --------------- VMOVDQU32 zmm_src -> zmm_dst ----------------- */
+		/* --------------- VMOVDQU32: zmm_src -> zmm_dst ----------------- */
 	case(11):
 		x86_op = 0x6F;
 		mm = 1;        /* map 0F */
@@ -1926,6 +1926,17 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		break;
 
 		return 0;
+		/*---------------------------  VPANDD: zmm_dst = zmm_dst & zmm_src -------------- */
+	case 13: 
+		x86_op = 0xDB;
+		mm = 1;       /* map 0F */
+		pp = 1;       /* prefix 66 */
+		w = 0;
+
+		reg_val = dst;
+		rm_val = src;
+		v_reg = dst;
+		break;
 	default:
 		return prog;
 	}
@@ -1937,8 +1948,16 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 
   /* ----------------- EVEX P1 --------------- */
 
+  bool vvvv_unused =
+	sub_op == 3  ||  /* shuffle */
+	sub_op == 5  ||  /* load */
+	sub_op == 6  ||  /* store */
+	sub_op == 10 ||  /* broadcast */
+	sub_op == 11;    /* register move */
+  
+  u8 vvvv = vvvv_unused ? 0x0Fu : (~v_reg & 0x0Fu);
   /* build the EVEX P1: [ W v v v v 1 p p ]  */
-  u8 vvvv = (v_reg == 0x0F) ? 0x0Fu : (~v_reg & 0x0Fu);
+ // u8 vvvv = (v_reg == 0x0F) ? 0x0Fu : (~v_reg & 0x0Fu);
   evex_p1 =  ((w & 1u) << 7) |  (vvvv << 3) |  0x04u | (pp & 0x3u);
   /* ------------ EVEX P2 fixed value ----------- */
   evex_p2 = 0x48;

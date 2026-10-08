@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <asm/fpu/api.h>
 #include <linux/irq.h>
 #include <net/xdp_sock_drv.h>
 #include "en.h"
@@ -38,6 +39,13 @@
 #include "en/xsk/rx.h"
 #include "en/xsk/tx.h"
 #include "en_accel/ktls_txrx.h"
+
+
+static bool daisy_fpu_napi = true;
+module_param(daisy_fpu_napi, bool, 0644);
+MODULE_PARM_DESC(daisy_fpu_napi, "Enable DAISY kernel FPU management around mlx5 NAPI RX");
+
+
 
 static inline bool mlx5e_channel_no_affinity_change(struct mlx5e_channel *c)
 {
@@ -134,6 +142,7 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	bool aff_change = false;
 	bool busy_xsk = false;
 	bool busy = false;
+	bool fpu_active = false;
 	int work_done = 0;
 	u16 qos_sqs_size;
 	bool xsk_open;
@@ -165,6 +174,15 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	/* budget=0 means we may be in IRQ context, do as little as possible */
 	if (unlikely(!budget))
 		goto out;
+
+	if (daisy_fpu_napi) {
+		if (likely(irq_fpu_usable())) {
+			kernel_fpu_begin();
+			fpu_active = true;
+		} else {
+			pr_warn_once("DAISY_MLX5: FPU not usable in NAPI RX path\n");
+		}
+	}
 
 	if (c->xdp) {
 		if (c->xdpsq)
@@ -258,6 +276,8 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	}
 
 out:
+	if (fpu_active)
+		kernel_fpu_end();
 	rcu_read_unlock();
 
 	return work_done;

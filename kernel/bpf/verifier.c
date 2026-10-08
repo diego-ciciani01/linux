@@ -15076,7 +15076,7 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 				__mark_reg_known(regs + insn->dst_reg,
 						 (u32)insn->imm);
 			}
-		}
+ 		}
 	} else if (opcode == BPF_TIME){ /* axcept the BPF_TIME opcode*/
         /*
 	      struct bpf_reg_state *dst_reg;
