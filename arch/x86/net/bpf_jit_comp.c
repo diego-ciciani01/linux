@@ -1790,7 +1790,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 
 	switch(sub_op){
 		/* ---------------------- VPADD ------------------------- */
-fp	case(1):
+	case(1):
 		x86_op = 0xFE;
 		mm = 1; /* map 0F */
 		pp = 1; /* prefix 66 */
