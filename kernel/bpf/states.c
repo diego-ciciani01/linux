@@ -986,6 +986,13 @@ static bool states_equal(struct bpf_verifier_env *env,
 	if (old->curframe != cur->curframe)
 		return false;
 
+	/* Never prune a path with a different set of initialized ZMM regs.
+	 * Exact comparison is conservative and avoids vector-specific liveness
+	 * tracking until it is implemented.
+	 */
+	if (old->simd_reg_init_mask != cur->simd_reg_init_mask)
+		return false;
+
 	reset_idmap_scratch(env);
 
 	/* Verification state from speculative execution simulation

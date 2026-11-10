@@ -1651,6 +1651,7 @@ int bpf_copy_verifier_state(struct bpf_verifier_state *dst_state,
 	dst_state->speculative = src->speculative;
 	dst_state->in_sleepable = src->in_sleepable;
 	dst_state->curframe = src->curframe;
+	dst_state->simd_reg_init_mask = src->simd_reg_init_mask;
 	dst_state->branches = src->branches;
 	dst_state->parent = src->parent;
 	dst_state->first_insn_idx = src->first_insn_idx;
@@ -17301,11 +17302,70 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
   
   pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
 
-  /* accecpt the BPF_SIMD istruction */
+  /* Check first-class SIMD instructions against the path's ZMM state. */
   if (BPF_CLASS(insn->code) == BPF_ALU64 && BPF_OP(insn->code) == 0xe0){
+    u16 read_mask = 0, write_mask = 0;
+
     if (insn->dst_reg > 15 || insn->src_reg > 15 ){
 	       verbose(env, "AVX-512 Error: ZMM register out of range (0-15)\n");
         return -EINVAL;
+    }
+
+    switch (insn->imm) {
+    case 5: /* VMOVDQU32: memory -> ZMM destination */
+        write_mask = BIT(insn->dst_reg);
+        break;
+    case 6: /* VMOVDQU32: ZMM source -> memory */
+        read_mask = BIT(insn->src_reg);
+        break;
+    case 3: /* VPSHUFD: ZMM source -> destination */
+    case 7: /* VPROLQ immediate: ZMM source -> destination */
+    case 11: /* VMOVDQU32: ZMM source -> destination */
+        read_mask = BIT(insn->src_reg);
+        write_mask = BIT(insn->dst_reg);
+        break;
+    case 10: /* VPBROADCASTD: scalar BPF register -> ZMM */
+        if (insn->src_reg >= BPF_REG_FP) {
+            verbose(env, "invalid scalar broadcast source R%d\n", insn->src_reg);
+            return -EINVAL;
+        }
+        err = check_reg_arg(env, insn->src_reg, SRC_OP);
+        if (err)
+            return err;
+        if (cur_regs(env)[insn->src_reg].type != SCALAR_VALUE) {
+            verbose(env, "SIMD broadcast source R%d must be scalar\n", insn->src_reg);
+            return -EACCES;
+        }
+        write_mask = BIT(insn->dst_reg);
+        break;
+    case 8: /* VPMADD52LUQ: old destination plus two sources */
+    case 12: /* Three-register multiply: two source registers */
+        if (insn->off < 0 || insn->off >= BPF_SIMD_MAX_REG) {
+            verbose(env, "invalid third SIMD source ZMM%d\n", insn->off);
+            return -EINVAL;
+        }
+        read_mask = BIT(insn->src_reg) | BIT(insn->off);
+        if (insn->imm == 8)
+            read_mask |= BIT(insn->dst_reg);
+        write_mask = BIT(insn->dst_reg);
+        break;
+    case 1: /* VPADDD */
+    case 2: /* VPMULLQ */
+    case 4: /* VPXORD */
+    case 9: /* VPADDQ */
+    case 13: /* VPANDD */
+        read_mask = BIT(insn->dst_reg) | BIT(insn->src_reg);
+        write_mask = BIT(insn->dst_reg);
+        break;
+    default:
+        verbose(env, "unsupported SIMD sub-operation %d\n", insn->imm);
+        return -EINVAL;
+    }
+
+    if ((env->cur_state->simd_reg_init_mask & read_mask) != read_mask) {
+        verbose(env, "SIMD operation reads uninitialized ZMM registers (required=0x%x initialized=0x%x)\n",
+                read_mask, env->cur_state->simd_reg_init_mask);
+        return -EACCES;
     }
 
     if (insn->imm == 5 || insn->imm == 6) {
@@ -17370,6 +17430,15 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 	    switch (type) {
 
 	    case PTR_TO_STACK:
+		/* The generic stack helpers operate on one 8-byte slot.
+		 * A 64-byte SIMD access must visit each slot separately.
+		 * Restrict this first version to fixed, 8-byte aligned accesses.
+		 */
+		if (!tnum_is_const(reg->var_off) ||
+		    ((reg->var_off.value + off) & (BPF_REG_SIZE - 1))) {
+		    verbose(env, "SIMD stack access requires an 8-byte aligned fixed offset\n");
+		    return -EACCES;
+		}
 		    /*
 		     * First make sure [ptr + off, ptr + off + 64)
 		     * falls inside the BPF stack.
@@ -17381,35 +17450,16 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 		    if (err)
 			    return err;
 
-		    if (access_type == BPF_READ) {
-			    /*
-			     * SIMD load:
-			     * all 64 bytes must already be initialized.
-			     *
-			     * -1 means that the result doesn't go into a normal
-			     * BPF scalar register.
-			     */
-			    err = check_stack_read(
-				    env, reg, argno,
-				    off, simd_size,
-				    -1);
-		    } else {
-			    /*
-			     * SIMD store:
-			     * mark those 64 bytes as initialized.
-			     *
-			     * This is CRUCIAL because afterwards CMS reads h[]
-			     * using normal scalar BPF loads.
-			     */
-			    err = check_stack_write(
-				    env, reg,
-				    off, simd_size,
-				    -1,
-				    env->insn_idx);
-		    }
-
+		for (int i = 0; i < simd_size; i += BPF_REG_SIZE) {
+		    if (access_type == BPF_READ)
+			err = check_stack_read(env, reg, argno,
+					       off + i, BPF_REG_SIZE, -1);
+		    else
+			err = check_stack_write(env, reg, off + i,
+					        BPF_REG_SIZE, -1, env->insn_idx);
 		    if (err)
-			    return err;
+			return err;
+		}
 
 		    break;
 
@@ -17477,6 +17527,7 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 	    }
     }
     
+    env->cur_state->simd_reg_init_mask |= write_mask;
     return 0;
   }
 
@@ -17543,8 +17594,13 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 			if (insn->src_reg == BPF_PSEUDO_CALL)
 				return check_func_call(env, insn, &env->insn_idx);
 			if (insn->src_reg == BPF_PSEUDO_KFUNC_CALL)
-				return check_kfunc_call(env, insn, &env->insn_idx);
-			return check_helper_call(env, insn, &env->insn_idx);
+				err = check_kfunc_call(env, insn, &env->insn_idx);
+			else
+				err = check_helper_call(env, insn, &env->insn_idx);
+			/* Helpers and kfuncs have no defined ZMM preservation ABI. */
+			if (err >= 0)
+				env->cur_state->simd_reg_init_mask = 0;
+			return err;
 		} else if (opcode == BPF_JA) {
 			if (BPF_SRC(insn->code) == BPF_X)
 				return check_indirect_jump(env, insn);
@@ -18223,9 +18279,9 @@ static int check_alu_fields(struct bpf_verifier_env *env, struct bpf_insn *insn)
 			return -EINVAL;
 		}
 
-		if (insn->imm < 1 || insn->imm > 12) {
+		if (class != BPF_ALU64 || insn->imm < 1 || insn->imm > 13) {
 			verbose(env,
-				"DAISY V2: SIMD sub-op %d invalid, max=12\n",
+				"DAISY V2: SIMD sub-op %d invalid, max=13\n",
 				insn->imm);
 			return -EINVAL;
 		}
@@ -18458,6 +18514,16 @@ static int check_and_resolve_insns(struct bpf_verifier_env *env)
 					return -EINVAL;
 				}
 
+				break;
+
+			case 10: /* scalar BPF register -> ZMM broadcast */
+				if (insn->dst_reg >= BPF_SIMD_MAX_REG ||
+				    insn->src_reg >= BPF_REG_FP) {
+					verbose(env,
+						"invalid SIMD broadcast dst=ZMM%d src=R%d\n",
+						insn->dst_reg, insn->src_reg);
+					return -EINVAL;
+				}
 				break;
 
 				/*

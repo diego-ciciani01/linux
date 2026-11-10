@@ -496,7 +496,7 @@ struct bpf_verifier_state {
 	u32 branches;
 	u32 insn_idx;
 	u32 curframe;
-
+	u16 simd_reg_init_mask;
 	u32 acquired_refs;
 	u32 active_locks;
 	u32 active_preempt_locks;
