@@ -12918,7 +12918,7 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 		base_type(regs[BPF_REG_6].type),
 		regs[BPF_REG_6].var_off.value,
 		regs[BPF_REG_6].var_off.mask);
-	
+
 	/* skip for now, but return error when we find this in fixup_kfunc_call */
 	if (!insn->imm)
 		return 0;
@@ -13114,7 +13114,7 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
         regs[BPF_REG_6].type,
         regs[BPF_REG_6].var_off.value,
         regs[BPF_REG_6].var_off.mask);
-	
+
 	for (i = 0; i < CALLER_SAVED_REGS; i++) {
 		u32 regno = caller_saved[i];
 
@@ -13127,7 +13127,7 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
         regs[BPF_REG_6].type,
         regs[BPF_REG_6].var_off.value,
         regs[BPF_REG_6].var_off.mask);
-	
+
 	invalidate_outgoing_stack_args(env, cur_func(env));
 
 	/* Check return type */
@@ -13302,8 +13302,8 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
         regs[BPF_REG_6].type,
         regs[BPF_REG_6].var_off.value,
         regs[BPF_REG_6].var_off.mask);
-	
-	
+
+
 
 	return 0;
 }
@@ -17299,7 +17299,7 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
    }
 
 
-  
+
   pr_info("DAISY DEBUG: analizzo insn_idx %d con code %x\n", env->insn_idx, insn->code);
 
   /* Check first-class SIMD instructions against the path's ZMM state. */
@@ -17429,41 +17429,51 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 
 	    switch (type) {
 
-	    case PTR_TO_STACK:
-		/* The generic stack helpers operate on one 8-byte slot.
-		 * A 64-byte SIMD access must visit each slot separately.
-		 * Restrict this first version to fixed, 8-byte aligned accesses.
-		 */
-		if (!tnum_is_const(reg->var_off) ||
-		    ((reg->var_off.value + off) & (BPF_REG_SIZE - 1))) {
-		    verbose(env, "SIMD stack access requires an 8-byte aligned fixed offset\n");
-		    return -EACCES;
+	    case PTR_TO_STACK:{
+			int chunk;
+
+			/*
+			 * Check the bounds of the entire 64-byte SIMD access.
+			 */
+			err = check_stack_access_within_bounds(
+					env, reg, argno,
+					off, simd_size,
+					access_type);
+			if (err)
+				return err;
+
+			/*
+			 * The regular verifier stack helpers operate on
+			 * scalar-sized slots. Check all eight 8-byte chunks.
+			 *
+			 * This is a first fix for aligned, fixed-offset
+			 * SIMD accesses.
+			 */
+			for (chunk = 0; chunk < simd_size;
+				 chunk += BPF_REG_SIZE) {
+
+				if (access_type == BPF_READ) {
+					err = check_stack_read(
+							env, reg, argno,
+							off + chunk,
+							BPF_REG_SIZE,
+							-1);
+				} else {
+					err = check_stack_write(
+							env, reg,
+							off + chunk,
+							BPF_REG_SIZE,
+							-1,
+							env->insn_idx);
+				}
+
+				if (err)
+					return err;
+			}
+
+			break;
 		}
-		    /*
-		     * First make sure [ptr + off, ptr + off + 64)
-		     * falls inside the BPF stack.
-		     */
-		    err = check_stack_access_within_bounds(
-			    env, reg, argno,
-			    off, simd_size,
-			    access_type);
-		    if (err)
-			    return err;
-
-		for (int i = 0; i < simd_size; i += BPF_REG_SIZE) {
-		    if (access_type == BPF_READ)
-			err = check_stack_read(env, reg, argno,
-					       off + i, BPF_REG_SIZE, -1);
-		    else
-			err = check_stack_write(env, reg, off + i,
-					        BPF_REG_SIZE, -1, env->insn_idx);
-		    if (err)
-			return err;
-		}
-
-		    break;
-
-	    case PTR_TO_MAP_VALUE:
+		case PTR_TO_MAP_VALUE:
 		    /*
 		     * This is what we need for .rodata.
 		     *
@@ -17526,7 +17536,7 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 		    return -EACCES;
 	    }
     }
-    
+
     env->cur_state->simd_reg_init_mask |= write_mask;
     return 0;
   }
@@ -18552,7 +18562,7 @@ static int check_and_resolve_insns(struct bpf_verifier_env *env)
 			continue;
 		}
 
-		
+
 		if (insn->dst_reg >= MAX_BPF_REG &&
 		    !is_stack_arg_st(insn) && !is_stack_arg_stx(insn)) {
 			verbose(env, "R%d is invalid\n", insn->dst_reg);
