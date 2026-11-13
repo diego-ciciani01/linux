@@ -385,7 +385,7 @@ struct bpf_func_state {
 	 *                           | number of simulations is tracked in frame N
 	 */
 	u32 callback_depth;
-
+	u16 simd_reg_init_mask;
 	/* The following fields should be last. See copy_func_state() */
 	/* The state of the stack. Each element of the array describes BPF_REG_SIZE
 	 * (i.e. 8) bytes worth of stack memory.
@@ -496,7 +496,6 @@ struct bpf_verifier_state {
 	u32 branches;
 	u32 insn_idx;
 	u32 curframe;
-	u16 simd_reg_init_mask;
 	u32 acquired_refs;
 	u32 active_locks;
 	u32 active_preempt_locks;

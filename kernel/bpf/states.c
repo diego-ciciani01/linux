@@ -946,11 +946,17 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 	u16 live_regs = env->insn_aux_data[insn_idx].live_regs_before;
 	u16 i;
 
-	if (old->callback_depth > cur->callback_depth)
-		return false;
 
-	if (!old->no_stack_arg_load && cur->no_stack_arg_load)
-		return false;
+    /* SIMD-aware state pruning */
+    if (old->simd_reg_init_mask != cur->simd_reg_init_mask)
+        return false;
+
+    if (old->callback_depth > cur->callback_depth)
+        return false;
+    if (!old->no_stack_arg_load && cur->no_stack_arg_load)
+        return false;
+
+
 
 	for (i = 0; i < MAX_BPF_REG; i++)
 		if (((1 << i) & live_regs) &&
@@ -964,7 +970,7 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 	if (!stack_arg_safe(env, old, cur, &env->idmap_scratch, exact))
 		return false;
 
-	return true;
+    return true;
 }
 
 static void reset_idmap_scratch(struct bpf_verifier_env *env)
@@ -986,14 +992,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 	if (old->curframe != cur->curframe)
 		return false;
 
-	/* Never prune a path with a different set of initialized ZMM regs.
-	 * Exact comparison is conservative and avoids vector-specific liveness
-	 * tracking until it is implemented.
-	 */
-	if (old->simd_reg_init_mask != cur->simd_reg_init_mask)
-		return false;
-
-	reset_idmap_scratch(env);
+    reset_idmap_scratch(env);
 
 	/* Verification state from speculative execution simulation
 	 * must never prune a non-speculative execution one.

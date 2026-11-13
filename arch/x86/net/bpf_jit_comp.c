@@ -1811,15 +1811,15 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		/* ------------------------ VPSHUFD --------------------------- */
 	case(3):
 		x86_op = 0x70;
-		mm = 1; 
-		pp = 1; 
+		mm = 1;
+		pp = 1;
 		w  = 0;
 
-		reg_val = dst;    
+		reg_val = dst;
 		rm_val = src;
 
 		v_reg = 0x0F;
-	
+
 		has_imm8 = true;
 		imm8 = (u8)off;
 		break;
@@ -1895,9 +1895,9 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		w = 0;               /* D = 32 bit */
 
 		reg_val = dst;       /* ZMM destination */
-		rm_val = bpf2x86[src]; 
+		rm_val = bpf2x86[src];
 
-		v_reg = 0x0F;       
+		v_reg = 0x0F;
 
 		break;
 		/* --------------- VMOVDQU32: zmm_src -> zmm_dst ----------------- */
@@ -1914,7 +1914,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 		break;
 
 	case(12):
-		
+
 		x86_op = 0x40;
 		mm     = 2;
 		pp     = 1;
@@ -1927,7 +1927,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 
 		return 0;
 		/*---------------------------  VPANDD: zmm_dst = zmm_dst & zmm_src -------------- */
-	case 13: 
+	case 13:
 		x86_op = 0xDB;
 		mm = 1;       /* map 0F */
 		pp = 1;       /* prefix 66 */
@@ -1954,7 +1954,7 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 	sub_op == 6  ||  /* store */
 	sub_op == 10 ||  /* broadcast */
 	sub_op == 11;    /* register move */
-  
+
   u8 vvvv = vvvv_unused ? 0x0Fu : (~v_reg & 0x0Fu);
   /* build the EVEX P1: [ W v v v v 1 p p ]  */
  // u8 vvvv = (v_reg == 0x0F) ? 0x0Fu : (~v_reg & 0x0Fu);
@@ -1973,39 +1973,40 @@ static u8 *emit_simd_alu(u8 opcode, u8 dst, u8 src, u8 sub_op, s16 off, u8 *prog
 
   if (!is_mem){
     *prog++ = 0xc0u | ((reg_val & 7u) << 3) | (rm_val & 7u);
-  
+
     if (has_imm8)
     	*prog++ = imm8;
   }else {
-    u8 base3 = rm_val & 7u;
-    u8 mod;
+	u8 base3 = rm_val & 7u;
+	u8 mod;
 
-    if (off == 0 && base3 != 5) {
-      mod = 0x00;   /* [reg] */
-    } else if (off >= -128 && off <= 127) {
-      mod = 0x40;   /* [reg+disp8] — 1 byte displacement */
-    } else {
-      mod = 0x80;   /* [reg+disp32]— 4 byte displacement */
-    }
+	/*
+	 * Use disp32 for non-zero offsets.
+	 * EVEX disp8 is compressed (disp8 * N), so it
+	 * cannot directly encode arbitrary byte offsets.
+	 */
+	if (off == 0 && base3 != 5)
+		mod = 0x00;
+	else
+		mod = 0x80;
 
-    /* ModRM */
-    *prog++ = mod | ((reg_val & 7u) << 3) | base3;
+	/* ModRM */
+	*prog++ = mod | ((reg_val & 7u) << 3) | base3;
 
-    if (base3 == 4)
-      *prog++ = 0x24u;
+	/* SIB */
+	if (base3 == 4)
+		*prog++ = 0x24u;
 
-    /* Displacement */
-    if (mod == 0x40) {
-      *prog++ = (u8)(s8)off;
-    } else if (mod == 0x80) {
-      s32 d = (s32)off;
-      *prog++ = (u8)(d);
-      *prog++ = (u8)(d >> 8);
-      *prog++ = (u8)(d >> 16);
-      *prog++ = (u8)(d >> 24);
-    }
-  }
+	/* Unscaled 32-bit displacement */
+	if (mod == 0x80) {
+		s32 d = (s32)off;
 
+		*prog++ = (u8)d;
+		*prog++ = (u8)(d >> 8);
+		*prog++ = (u8)(d >> 16);
+		*prog++ = (u8)(d >> 24);
+	}
+	}
   {
     int len = (int)(prog - emit_start);
     u8 buf[64];
@@ -2422,7 +2423,7 @@ static int do_jit(struct bpf_verifier_env *env, struct bpf_prog *bpf_prog, int *
 			}
 
 			break;
-	
+
 
 		case BPF_ALU64 | BPF_MOV | BPF_K:
 		case BPF_ALU | BPF_MOV | BPF_K:

@@ -1651,7 +1651,6 @@ int bpf_copy_verifier_state(struct bpf_verifier_state *dst_state,
 	dst_state->speculative = src->speculative;
 	dst_state->in_sleepable = src->in_sleepable;
 	dst_state->curframe = src->curframe;
-	dst_state->simd_reg_init_mask = src->simd_reg_init_mask;
 	dst_state->branches = src->branches;
 	dst_state->parent = src->parent;
 	dst_state->first_insn_idx = src->first_insn_idx;
@@ -9384,6 +9383,8 @@ static int check_func_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 		/* mark global subprog for verifying after main prog */
 		subprog_aux(env, subprog)->called = true;
 		clear_caller_saved_regs(env, caller->regs);
+        /* SIMD ABI v1: global BPF calls also clobber vector registers. */
+        caller->simd_reg_init_mask = 0;
 		invalidate_outgoing_stack_args(env, cur_func(env));
 
 		/* All non-void global functions return a 64-bit SCALAR_VALUE. */
@@ -9420,13 +9421,18 @@ static int check_func_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	/* for regular function entry setup new frame and continue
 	 * from that frame.
 	 */
-	err = setup_func_entry(env, subprog, *insn_idx, set_callee_state, state);
-	if (err)
-		return err;
 
-	clear_caller_saved_regs(env, caller->regs);
+    err = setup_func_entry(env, subprog, *insn_idx,
+                                   set_callee_state, state);
+    if (err)
+            return err;
 
-	/* and go analyze first insn of the callee */
+    /* SIMD ABI v1: all vector registers are caller-saved. */
+    caller->simd_reg_init_mask = 0;
+
+    clear_caller_saved_regs(env, caller->regs);
+
+    /* and go analyze first insn of the callee */
 	*insn_idx = env->subprog_info[subprog].start - 1;
 
 	if (env->log.level & BPF_LOG_LEVEL) {
@@ -17362,9 +17368,9 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
         return -EINVAL;
     }
 
-    if ((env->cur_state->simd_reg_init_mask & read_mask) != read_mask) {
+    if ((cur_func(env)->simd_reg_init_mask & read_mask) != read_mask) {
         verbose(env, "SIMD operation reads uninitialized ZMM registers (required=0x%x initialized=0x%x)\n",
-                read_mask, env->cur_state->simd_reg_init_mask);
+                read_mask, cur_func(env)->simd_reg_init_mask);
         return -EACCES;
     }
 
@@ -17537,7 +17543,7 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 	    }
     }
 
-    env->cur_state->simd_reg_init_mask |= write_mask;
+    cur_func(env)->simd_reg_init_mask |= write_mask;
     return 0;
   }
 
@@ -17609,7 +17615,7 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 				err = check_helper_call(env, insn, &env->insn_idx);
 			/* Helpers and kfuncs have no defined ZMM preservation ABI. */
 			if (err >= 0)
-				env->cur_state->simd_reg_init_mask = 0;
+				cur_func(env)->simd_reg_init_mask = 0;
 			return err;
 		} else if (opcode == BPF_JA) {
 			if (BPF_SRC(insn->code) == BPF_X)
