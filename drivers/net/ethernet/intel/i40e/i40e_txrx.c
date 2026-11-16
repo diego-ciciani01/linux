@@ -2444,7 +2444,7 @@ static void i40e_consume_xdp_buff(struct i40e_ring *rx_ring,
  * Returns amount of work completed
  **/
 static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
-			     unsigned int *rx_cleaned)
+			     unsigned int *rx_cleaned, bool fpu_active)
 {
 	unsigned int total_rx_bytes = 0, total_rx_packets = 0;
 	u16 cleaned_count = I40E_DESC_UNUSED(rx_ring);
@@ -2539,7 +2539,10 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
 		if (neop)
 			continue;
 
-		xdp_res = i40e_run_xdp(rx_ring, xdp, xdp_prog);
+        if (unlikely(xdp_prog && !fpu_active))
+                xdp_res = I40E_XDP_CONSUMED;
+        else
+                xdp_res = i40e_run_xdp(rx_ring, xdp, xdp_prog);
 
 		if (xdp_res) {
 			xdp_xmit |= xdp_res & (I40E_XDP_TX | I40E_XDP_REDIR);
@@ -2820,26 +2823,28 @@ int i40e_napi_poll(struct napi_struct *napi, int budget)
                 kernel_fpu_begin();
                 fpu_active = true;
         }
-	} 
-	
-	
-	i40e_for_each_ring(ring, q_vector->rx) {
-                int cleaned = ring->xsk_pool ?
-                              i40e_clean_rx_irq_zc(
-                                      ring,
-                                      budget_per_ring) :
-                              i40e_clean_rx_irq(
-                                      ring,
-                                      budget_per_ring,
-                                      &rx_cleaned);
+	}
 
-                work_done += cleaned;
+       i40e_for_each_ring(ring, q_vector->rx) {
+            int cleaned = ring->xsk_pool ?
+                          i40e_clean_rx_irq_zc(
+                                  ring,
+                                  budget_per_ring,
+                                  fpu_active) :
+                          i40e_clean_rx_irq(
+                                  ring,
+                                  budget_per_ring,
+                                  &rx_cleaned,
+                                  fpu_active);
 
-                if (cleaned >= budget_per_ring)
-                        clean_complete = rx_clean_complete = false;
-        }
+        work_done += cleaned;
 
-        /*
+        if (cleaned >= budget_per_ring)
+                clean_complete = rx_clean_complete = false;
+    }
+
+
+       /*
          * IMPORTANT:
          * close the FPU context immediately after RX/XDP.
          *

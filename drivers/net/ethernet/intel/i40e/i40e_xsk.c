@@ -403,7 +403,7 @@ static void i40e_handle_xdp_result_zc(struct i40e_ring *rx_ring,
  *
  * Returns amount of work completed
  **/
-int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
+int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget, bool fpu_active)
 {
 	unsigned int total_rx_bytes = 0, total_rx_packets = 0;
 	u16 next_to_process = rx_ring->next_to_process;
@@ -472,8 +472,14 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 		if (i40e_is_non_eop(rx_ring, rx_desc))
 			continue;
 
-		xdp_res = i40e_run_xdp_zc(rx_ring, first, xdp_prog);
-		i40e_handle_xdp_result_zc(rx_ring, first, rx_desc, &rx_packets,
+
+        if (unlikely(!fpu_active))
+            xdp_res = I40E_XDP_CONSUMED;
+        else
+            xdp_res = i40e_run_xdp_zc(rx_ring, first, xdp_prog);
+
+
+        i40e_handle_xdp_result_zc(rx_ring, first, rx_desc, &rx_packets,
 					  &rx_bytes, xdp_res, &failure);
 		next_to_clean = next_to_process;
 		if (failure)
